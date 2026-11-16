@@ -205,6 +205,7 @@ rep('</script>\n','</script>\n</body>\n</html>\n') if s.rstrip().endswith('</scr
 if not s.rstrip().endswith('</html>'): s=s.rstrip()+'\n</body>\n</html>\n'
 
 exec(open('/home/claude/satb-app/tools/patch_chant.py').read())
+exec(open('/home/claude/satb-app/tools/patch_playback.py').read())
 for bad in ['getSampler','claude.use','scanUI','readScoreImages','sicutXml','satb:lastScan','askCoach','fonts.googleapis','cdn.jsdelivr','cdnjs']:
     assert bad not in s, 'leftover: '+bad
 open('/home/claude/satb-app/index.html','w').write(s)

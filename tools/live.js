@@ -27,6 +27,7 @@ async function startLive(){
   if(E.length<3){ st.textContent='Choose a few more bars: the coach needs at least three notes of your part.'; return; }
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ st.className='err'; st.textContent='This browser can’t use the microphone. Open the app from your home screen, or in Safari or Chrome.'; return; }
   halt(); ensureAudio();
+  try{ await renderVoices(rangeStart(),rangeEnd(),60/bpm); }catch(e){}
   setAudioSession('play-and-record');
   let stream;
   try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); }
@@ -42,14 +43,16 @@ async function startLive(){
   const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
   const ms=E.map(n=>n.m);
   liveTake={stream,src,an,v,E,raw:new Float32Array(an.fftSize),x:new Float32Array(Math.floor(an.fftSize/ds)),d:new Float32Array(Math.floor(an.fftSize/ds)),
-    ds,sr,fmin:isChant()?55:fmin/1.6,fmax:isChant()?950:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
+    ds,sr,fmin:isChant()?55:fmin/1.6,fmax:isChant()?950:fmax*1.6,pts:[],floor:0.003,gate:0.012,from:fromBar,to:toBar,bpm,rs:rangeStart(),
     lo:Math.min(...ms)-3,hi:Math.max(...ms)+3,frame:0,
     C:{bg:col('--surface'),line:col('--line'),muted:col('--muted'),note:col('--'+v.toLowerCase()),t:col('--t'),a:col('--a'),s:col('--s'),hot:col('--hot')}};
   liveLoopPrev=$('loop').checked; $('loop').checked=false;
   $('liveLabel').textContent='Stop and score'; $('liveStrip').hidden=false; $('liveGot').textContent='Listening…'; $('liveWant').textContent='';
   st.textContent=`Singing ${isChant()?'the chant':VNAME[v]}, ${rangeWord()} ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
-  pos=rangeStart(); startPlayback(pos,$('count').checked);
-  liveTake.t0=S0.passes[0].t0;
+  pos=rangeStart(); await startPlayback(pos,$('count').checked);
+  if(!liveTake) return;
+  if(!S0){ stopLive(false); return; }
+  liveTake.t0=S0.t0;
   requestAnimationFrame(liveFrame);
 }
 function liveExpected(L,t){ for(const n of L.E) if(t>=n.s&&t<n.e) return n.m; return null; }
@@ -60,7 +63,7 @@ function liveFrame(){
   const tNow=actx.currentTime-(L.raw.length/actx.sampleRate)/2-L.t0;
   const {rms,m}=yinFrame(L);
   // the silence gate follows the room's noise floor
-  L.floor=L.floor==null?rms:(rms<L.floor?rms:L.floor*1.001);
+  L.floor=rms<L.floor?Math.max(0.0005,rms):Math.min(0.02,L.floor*1.0005);
   L.gate=Math.max(0.004,L.floor*4);
   if(tNow>-0.6&&(!L.pts.length||tNow>L.pts[L.pts.length-1][0]+0.004)) L.pts.push([tNow,m]);
   drawLive(L,tNow,m);

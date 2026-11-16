@@ -1,5 +1,5 @@
 // Offline cache for SATB Part Player. Bump VERSION on every release.
-const VERSION = 'satb-v2';
+const VERSION = 'satb-v3';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest',
   'vendor/opensheetmusicdisplay.min.js', 'vendor/jszip.min.js', 'vendor/exsurge.min.js',
