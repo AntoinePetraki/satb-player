@@ -42,12 +42,12 @@ async function startLive(){
   const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
   const ms=E.map(n=>n.m);
   liveTake={stream,src,an,v,E,raw:new Float32Array(an.fftSize),x:new Float32Array(Math.floor(an.fftSize/ds)),d:new Float32Array(Math.floor(an.fftSize/ds)),
-    ds,sr,fmin:fmin/1.6,fmax:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
+    ds,sr,fmin:isChant()?55:fmin/1.6,fmax:isChant()?950:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
     lo:Math.min(...ms)-3,hi:Math.max(...ms)+3,frame:0,
     C:{bg:col('--surface'),line:col('--line'),muted:col('--muted'),note:col('--'+v.toLowerCase()),t:col('--t'),a:col('--a'),s:col('--s'),hot:col('--hot')}};
   liveLoopPrev=$('loop').checked; $('loop').checked=false;
   $('liveLabel').textContent='Stop and score'; $('liveStrip').hidden=false; $('liveGot').textContent='Listening…'; $('liveWant').textContent='';
-  st.textContent=`Singing ${VNAME[v]}, bars ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
+  st.textContent=`Singing ${isChant()?'the chant':VNAME[v]}, ${rangeWord()} ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
   pos=rangeStart(); startPlayback(pos,$('count').checked);
   liveTake.t0=S0.passes[0].t0;
   requestAnimationFrame(liveFrame);
@@ -112,11 +112,11 @@ function stopLive(analyse){
   const dur=E[E.length-1].e;
   // timing is known from the player; only allow for microphone delay
   const al=alignRec(P,hop,E,dur,{direct:true,oMin:-start-0.1,oMax:-start+0.45});
-  if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Not enough of your singing matched the ${VNAME[L.v]} part. Check the microphone can hear you clearly and that you sang the bars shown.`; return; }
+  if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Not enough of your singing matched ${isChant()?'the chant':'the '+VNAME[L.v]+' part'}. Check the microphone can hear you clearly and that you sang the ${rangeWord()} shown.`; return; }
   const r=analyseRec(P,hop,E,al);
   const lastBar=Math.max(...E.map(n=>n.bar));
   coachRes={...r,P,hop,E,dur,voice:L.v,from:L.from,to:lastBar,bpm:L.bpm,rs:L.rs,title:score.title,file:'live take'};
-  st.className=''; st.textContent=E.length<L.E.length?`Live take scored up to bar ${lastBar} (you stopped before the end).`:'Live take scored.';
+  st.className=''; st.textContent=E.length<L.E.length?`Live take scored up to ${unitWord().toLowerCase()} ${lastBar} (you stopped before the end).`:'Live take scored.';
   renderCoach(coachRes);
   $('coach').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
 }

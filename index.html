@@ -160,6 +160,10 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
 .map{margin-top:6px}
 .map .dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--line)}
 .spacer{height:24px}
+#chantSvg{padding:14px}
+#chantSvg svg{display:block;max-width:none}
+#chantSvg use.on{fill:var(--hot)}
+.ctl select{min-width:0;flex:1 1 0;text-overflow:ellipsis}
 .livestrip{flex:1 1 100%;display:flex;flex-direction:column;gap:4px;min-width:0}
 #liveCv{height:92px;border-radius:10px;background:var(--surface);border:1px solid var(--line);cursor:default}
 .liveinfo{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -215,9 +219,16 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
 
   <section class="load">
     <select id="lib" aria-label="Choose a score">
-      <option value="sicut">Sicut Cervus · Palestrina</option>
-      <option value="hymne">Hymne à la nuit · Rameau</option>
-      <option value="old100">Old Hundredth · hymn</option>
+      <optgroup label="Choir (SATB)">
+        <option value="sicut">Sicut Cervus · Palestrina</option>
+        <option value="hymne">Hymne à la nuit · Rameau</option>
+        <option value="old100">Old Hundredth · hymn</option>
+      </optgroup>
+      <optgroup label="Gregorian chant">
+        <option value="populus">Pópulus Sion · Introit, Advent II</option>
+        <option value="factus">Factus est · Communion, Pentecost</option>
+        <option value="veni">Veni Sancte Spiritus · Alleluia, Pentecost</option>
+      </optgroup>
     </select>
     <label class="btn primary" for="file">
       <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3l5 5h-3v6h-4V8H7l5-5zM5 18h14v2H5z"/></svg>
@@ -228,8 +239,8 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
       Save to library
     </button>
     <button class="btn" id="delLib" hidden>Remove from library</button>
-    <input id="file" type="file" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" hidden>
-    <p class="hint" id="hint">Opens MusicXML files (.musicxml, .mxl). For a new piece as a PDF or photos, send it to Claude in your chat and it will be added to the app.</p>
+    <input id="file" type="file" accept=".musicxml,.xml,.mxl,.gabc,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" hidden>
+    <p class="hint" id="hint">Opens MusicXML (.musicxml, .mxl) and Gregorian chant in gabc (.gabc). For a new piece as a PDF or photos, send it to Claude in your chat and it will be added to the app.</p>
     <p id="status" role="status" aria-live="polite"></p>
   </section>
 
@@ -243,6 +254,7 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
 
   <section class="paper" id="paper" aria-label="Score. Tap a spot to start playing from there.">
     <div id="osmd"></div>
+    <div id="chantSvg" hidden></div>
     <div id="playline"></div>
     <div id="sheetMsg">Engraving the score…</div>
   </section>
@@ -264,7 +276,7 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
     <div class="readout"><div class="big" id="bar">Bar 1</div><div class="small" id="barSub"></div></div>
   </section>
 
-  <section>
+  <section id="voicesSec">
     <p class="label">Voices to hear</p>
     <div class="chips" id="chips">
       <button class="chip" data-v="S"><span class="l">S</span><span class="n">Soprano</span></button>
@@ -280,20 +292,24 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
       <div class="name"><strong>Tempo</strong><span id="tempoSub"></span></div>
       <div class="ctl"><input type="range" id="tempo" min="30" max="220" step="1" aria-label="Tempo"><span class="val" id="tempoVal"></span></div>
     </div>
-    <div class="row">
+    <div class="row" id="chantRow" hidden>
+      <div class="name"><strong>Pitch</strong><span>Chant has no fixed pitch: pick a comfortable range, then fine-tune with Transpose</span></div>
+      <div class="ctl"><div class="seg" role="group" aria-label="Voice range"><button id="cvLow" aria-pressed="true">Low voice</button><button id="cvHigh" aria-pressed="false">High voice</button></div></div>
+    </div>
+    <div class="row" id="othersRow">
       <div class="name"><strong>Other voices</strong><span>Keep the rest of the choir softly in the background</span></div>
       <div class="ctl"><input type="range" id="others" min="0" max="100" step="5" value="0" aria-label="Other voices volume"><span class="val" id="othersVal">Off</span></div>
     </div>
     <div class="row">
-      <div class="name"><strong>Bars</strong><span>Practise one passage</span></div>
+      <div class="name"><strong id="rangeName">Bars</strong><span id="rangeHint">Practise one passage</span></div>
       <div class="ctl"><select id="from" aria-label="From bar"></select><span>to</span><select id="to" aria-label="To bar"></select></div>
     </div>
     <div class="row">
-      <div class="name"><strong>Loop</strong><span>Repeat the chosen bars</span></div>
+      <div class="name"><strong>Loop</strong><span id="loopHint">Repeat the chosen bars</span></div>
       <div class="ctl"><label class="switch"><input type="checkbox" id="loop" aria-label="Loop"><span></span></label></div>
     </div>
     <div class="row">
-      <div class="name"><strong>Count-in</strong><span>One bar of clicks before you start</span></div>
+      <div class="name"><strong id="countName">Count-in</strong><span id="countHint">One bar of clicks before you start</span></div>
       <div class="ctl"><label class="switch"><input type="checkbox" id="count" aria-label="Count-in"><span></span></label></div>
     </div>
     <div class="row">
@@ -360,6 +376,7 @@ summary span{color:var(--muted);font-weight:400;font-size:13px}
 </body>
 </html>
 <script src="vendor/jszip.min.js"></script>
+<script src="vendor/exsurge.min.js"></script>
 <script>
 const VOICES=['S','A','T','B'];
 const VNAME={S:'Soprano',A:'Alto',T:'Tenor',B:'Bass'};
@@ -646,10 +663,10 @@ function loadScore(s,{keepTempo=false}={}){
   const oldTempo=bpm;
   score=s; bpm=keepTempo?oldTempo:s.tempo; transpose=0; fromBar=1; toBar=s.measures.length; pos=0;
   $('tempo').value=bpm; $('tVal').textContent='0';
-  ['from','to'].forEach(id=>{$(id).innerHTML=s.measures.map((_,i)=>`<option value="${i+1}">Bar ${i+1}</option>`).join('');});
+  ['from','to'].forEach(id=>{$(id).innerHTML=s.measures.map((_,i)=>`<option value="${i+1}">${s.phraseLabels?esc(s.phraseLabels[i]):'Bar '+(i+1)}</option>`).join('');});
   $('from').value=1; $('to').value=toBar;
-  $('scoreTitle').innerHTML=`<b>${esc(s.title)}</b>${s.composer?' · '+esc(s.composer):''} · ${s.measures.length} bars`;
-  coachRes=null; $('coachOut').hidden=true; $('coachStatus').textContent='';
+  $('scoreTitle').innerHTML=`<b>${esc(s.title)}</b>${s.composer?' · '+esc(s.composer):''} · ${s.measures.length} ${s.kind==='chant'?'phrases':'bars'}`;
+  applyMode(); coachRes=null; $('coachOut').hidden=true; $('coachStatus').textContent='';
   rebuildVoices(); renderMapping(); updateTempo(); updateReadout();
   sheet.stale=true;
   if(view==='sheet') renderSheet(); else draw();
@@ -694,7 +711,7 @@ function applyGains(instant){
 }
 function playNote(m,t,dur,v){
   const f=440*Math.pow(2,(m+transpose-69)/12);
-  const o=actx.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+  const o=actx.createOscillator(); o.type=isChant()?'triangle':'sawtooth'; o.frequency.value=f;
   const o2=actx.createOscillator(); o2.type='sine'; o2.frequency.value=f;
   const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=Math.min(4200,f*5); lp.Q.value=0.5;
   const g2=actx.createGain(); g2.gain.value=0.7;
@@ -721,7 +738,7 @@ function startPlayback(fromBeat,withCount){
   const spb=60/bpm, rs=rangeStart(), re=rangeEnd();
   if(!(fromBeat>=rs && fromBeat<re-1e-6)) fromBeat=rs;
   const now=actx.currentTime+0.08; let t0=now;
-  if(withCount){const n=Math.max(1,Math.round(score.beatsPerBar));for(let i=0;i<n;i++) click(now+i*spb,i===0);t0=now+n*spb;}
+  if(withCount){ if(isChant()){ const first=voices.S.find(n=>n.t>=fromBeat-1e-6)||voices.S[0]; if(first){ playNote(first.m,now,2*spb,'S'); t0=now+3*spb; } } else {const n=Math.max(1,Math.round(score.beatsPerBar));for(let i=0;i<n;i++) click(now+i*spb,i===0);t0=now+n*spb;} }
   const ev=[];
   VOICES.forEach(v=>voices[v].forEach(n=>{if(n.t>=rs-1e-6&&n.t<re-1e-6) ev.push({t:n.t,d:Math.min(n.d,re-n.t),m:n.m,v});}));
   // a note already sounding at the start point plays from there
@@ -787,6 +804,8 @@ const sheet={meas:[],notes:[],byMeas:[],lit:new Set(),stale:true,ready:false,wid
 function sheetMsg(t){$('sheetMsg').textContent=t;}
 async function renderSheet(){
   if(!score) return;
+  if(isChant()) return renderChantSheet();
+  $('chantSvg').hidden=true; $('osmd').hidden=false;
   if(!window.opensheetmusicdisplay){ sheetMsg('The score view could not load. The piano roll still works.'); return; }
   const my=++renderSeq; sheet.ready=false; $('playline').style.display='none';
   sheetMsg('Engraving the score…');
@@ -802,6 +821,7 @@ async function renderSheet(){
   }catch(e){ console.error(e); if(my===renderSeq) sheetMsg('This score could not be drawn. The piano roll still works.'); }
 }
 function layoutSheet(){
+  if(isChant()){ renderChantSheet(); return; }
   const w=$('paper').clientWidth; sheet.width=w;
   osmd.zoom=w<480?0.5:w<700?0.62:0.78;
   osmd.render();
@@ -853,6 +873,7 @@ function measureAt(b){
 function instOn(inst){ const vs=instVoices[inst]; if(!vs) return true; for(const v of vs) if(v!=='-'&&sel.has(v)) return true; return false; }
 function applyDim(){ sheet.notes.forEach(n=>n.el.classList.toggle('dim',!instOn(n.inst))); }
 function updateSheet(beat){
+  if(isChant()) return updateChantSheet(beat);
   if(!sheet.ready||!score) return;
   const i=measureAt(Math.min(beat,score.end-1e-6)), m=sheet.meas[i], line=$('playline');
   if(!m){line.style.display='none';return;}
@@ -882,6 +903,7 @@ function updateSheet(beat){
   }
 }
 $('paper').addEventListener('click',e=>{
+  if(isChant()){ chantClick(e); return; }
   if(!sheet.ready) return;
   const r=$('paper').getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
   let best=-1;
@@ -896,7 +918,7 @@ let rsT=null;
 window.addEventListener('resize',()=>{
   clearTimeout(rsT);
   rsT=setTimeout(()=>{
-    if(view==='sheet'&&osmd&&sheet.ready&&Math.abs($('paper').clientWidth-sheet.width)>8){ try{layoutSheet();}catch(e){} }
+    if(view==='sheet'&&sheet.ready&&(isChant()?Math.abs($('paper').clientWidth-chantMap.width)>8:(osmd&&Math.abs($('paper').clientWidth-sheet.width)>8))){ try{layoutSheet();}catch(e){} }
     else if(view==='roll') draw();
   },200);
 });
@@ -910,15 +932,15 @@ function setLibOption(val,label){
   o.textContent=label; $('lib').value=val;
 }
 let fileScore=null, currentSource='sicut';
-const libDocs=new Map(), LIBKEY='satb:library', BUNDLED={sicut:'scores/sicut-cervus.xml',hymne:'scores/hymne-a-la-nuit.xml'}, bundleCache={};
-function libLoad(){ try{ Object.entries(JSON.parse(lsGet(LIBKEY)||'{}')).forEach(([k,v])=>{ if(v&&typeof v.xml==='string') libDocs.set(k,v); }); }catch(e){} }
+const libDocs=new Map(), LIBKEY='satb:library', BUNDLED={sicut:'scores/sicut-cervus.xml',hymne:'scores/hymne-a-la-nuit.xml',populus:'scores/populus-sion.gabc',factus:'scores/factus-est.gabc',veni:'scores/veni-sancte-spiritus.gabc'}, bundleCache={};
+function libLoad(){ try{ Object.entries(JSON.parse(lsGet(LIBKEY)||'{}')).forEach(([k,v])=>{ if(v&&(typeof v.xml==='string'||typeof v.gabcFile==='string')) libDocs.set(k,v); }); }catch(e){} }
 function libStore(){ try{ localStorage.setItem(LIBKEY,JSON.stringify(Object.fromEntries(libDocs))); return true; }catch(e){ return false; } }
 function updateSaveBtn(){ $('saveLib').hidden=!score||currentSource!=='file'; $('delLib').hidden=!currentSource.startsWith('lib:'); $('delLib').textContent='Remove from library'; }
 const slug=t=>(String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'score').slice(0,60);
 function saveToLibrary(){
   if(!score) return;
   const st=$('status'), id=slug(score.title);
-  libDocs.set(id,{title:score.title,composer:score.composer||'',bars:score.measures.length,xml:score.xml.replace(/>\s+</g,'><'),savedAt:Date.now()});
+  libDocs.set(id,isChant()?{kind:'chant',title:score.title,composer:score.composer||'',bars:score.measures.length,gabcFile:`name: ${score.src.title};\noffice-part: ${score.src.officePart};\nmode: ${score.src.mode};\n%%\n${score.src.gabc}`,savedAt:Date.now()}:{title:score.title,composer:score.composer||'',bars:score.measures.length,xml:score.xml.replace(/>\s+</g,'><'),savedAt:Date.now()});
   if(!libStore()){ libDocs.delete(id); st.className='err'; st.textContent='This phone has no room left for the app’s library. Remove a score you no longer need, then try again.'; return; }
   currentSource='lib:'+id; renderLibOptions(); $('lib').value='lib:'+id; updateSaveBtn();
   st.className=''; st.textContent=`Saved “${score.title}” to the library on this phone.`;
@@ -946,11 +968,11 @@ async function loadLibrary(id){
   const st=$('status'); st.className=''; st.textContent='';
   currentSource=id;
   try{
-    if(id.startsWith('lib:')){ const d=libDocs.get(id.slice(4)); if(!d) throw new Error(); loadScore(parseMusicXML(d.xml,d.title)); updateSaveBtn(); return; }
+    if(id.startsWith('lib:')){ const d=libDocs.get(id.slice(4)); if(!d) throw new Error(); loadScore(d.kind==='chant'?chantFromGabc(parseGabcFile(d.gabcFile,d.title)):parseMusicXML(d.xml,d.title)); updateSaveBtn(); return; }
     if(id==='old100') loadScore(parseMusicXML(hymnXML(),'Old Hundredth'));
     else if(BUNDLED[id]){
       if(!bundleCache[id]){ const r=await fetch(BUNDLED[id]); if(!r.ok) throw new Error(); bundleCache[id]=await r.text(); }
-      loadScore(parseMusicXML(bundleCache[id],id));
+      loadScore(/\.gabc$/.test(BUNDLED[id])?chantFromGabc(parseGabcFile(bundleCache[id],id)):parseMusicXML(bundleCache[id],id));
     } else if(id==='file'&&fileScore) loadScore(fileScore);
   }catch(e){
     st.className='err'; st.textContent='That score could not be opened. Showing Old Hundredth instead.';
@@ -964,6 +986,13 @@ $('file').addEventListener('change',async e=>{
   const st=$('status'); st.className=''; st.textContent='';
   const isXml=f=>/\.(musicxml|xml|mxl)$/i.test(f.name);
   try{
+    const gf=files.find(f=>/\.gabc$/i.test(f.name));
+    if(gf){
+      const s=chantFromGabc(parseGabcFile(await gf.text(),gf.name.replace(/\.[^.]+$/,'')));
+      fileScore=s; currentSource='file'; loadScore(s); setLibOption('file',s.title); updateSaveBtn();
+      st.textContent=`Loaded the chant “${s.title}”: ${s.measures.length} phrases.`;
+      return;
+    }
     if(files.some(isXml)){
       const f=files.find(isXml); st.textContent='Opening '+f.name+'…';
       const s=await readMusicXMLFile(f); fileScore=s; currentSource='file'; loadScore(s); setLibOption('file',s.title); updateSaveBtn();
@@ -985,17 +1014,17 @@ function renderChips(){
   $('all').setAttribute('aria-pressed',avail.every(v=>sel.has(v)));
 }
 function updateTempo(){
-  $('tempoVal').textContent=bpm+' BPM';
+  $('tempoVal').textContent=bpm+(isChant()?' /min':' BPM');
   const pct=Math.round(bpm/score.tempo*100);
-  $('tempoSub').textContent=`Original ${score.tempo} BPM · now ${pct}%`;
+  $('tempoSub').textContent=isChant()?'Notes per minute; a dotted note lasts two':`Original ${score.tempo} BPM · now ${pct}%`;
   refreshCoachSetup();
 }
 function updateReadout(){
   if(!score) return;
   const b=currentBeat(), i=measureAt(b);
   const beatIn=Math.floor(b-score.measures[i]+1e-6)+1;
-  $('bar').textContent='Bar '+(i+1);
-  $('barSub').textContent=`beat ${beatIn} · of ${score.measures.length} bars`;
+  $('bar').textContent=unitWord()+' '+(i+1);
+  $('barSub').textContent=isChant()?`of ${score.measures.length} phrases`:`beat ${beatIn} · of ${score.measures.length} bars`;
 }
 document.querySelectorAll('.chip[data-v]').forEach(ch=>ch.addEventListener('click',()=>{
   const v=ch.dataset.v; sel.has(v)?sel.delete(v):sel.add(v);
@@ -1092,7 +1121,7 @@ function refreshCoachSetup(){
   cs.innerHTML=avail.map(v=>`<option value="${v}">${VNAME[v]}</option>`).join('');
   const only=[...sel].filter(v=>voices[v].length);
   cs.value=avail.includes(prev)?prev:(only.length===1?only[0]:avail[0]||'');
-  $('coachWhat').textContent=`Bars ${fromBar}–${toBar} at ${bpm} BPM${transpose?`, transposed ${transpose>0?'+':''}${transpose}`:''}. Set these in the controls above before recording.`;
+  $('coachWhat').textContent=`${isChant()?'Phrases':'Bars'} ${fromBar}–${toBar} at ${bpm} ${isChant()?'notes per minute':'BPM'}${transpose?`, transposed ${transpose>0?'+':''}${transpose}`:''}. Set these in the controls above before recording.`;
 }
 function expectedNotes(v){
   const rs=rangeStart(), re=rangeEnd(), spb=60/bpm;
@@ -1164,7 +1193,7 @@ function alignRec(P,hop,E,dur,opt){
     for(let o=opt.oMin;o<=opt.oMax+1e-9;o+=0.01){const sc=ev(o,1,1);if(sc>best.sc)best={sc,o,k:1};}
   } else {
     const oMax=Math.max(0.5,T-dur*0.3);
-    for(let k=0.9;k<=1.1001;k+=0.02) for(let o=-1;o<=oMax;o+=0.1){const sc=ev(o,k,10);if(sc>best.sc)best={sc,o,k};}
+    for(let k=(opt&&opt.kMin)||0.9;k<=((opt&&opt.kMax)||1.1)+1e-4;k+=0.02) for(let o=-1;o<=oMax;o+=0.1){const sc=ev(o,k,10);if(sc>best.sc)best={sc,o,k};}
     const c=best; best={sc:-1e18,o:c.o,k:c.k};
     for(let k=c.k-0.02;k<=c.k+0.0201;k+=0.005) for(let o=c.o-0.15;o<=c.o+0.1501;o+=0.01){const sc=ev(o,k,1);if(sc>best.sc)best={sc,o,k};}
   }
@@ -1235,8 +1264,8 @@ function analyseRec(P,hop,E,al){
 }
 function coachTips(r){
   const t=[], c=v=>Math.round(Math.abs(v));
-  if(r.missed>r.total*0.15) t.push(['Some notes didn’t come through',`${r.missed} of ${r.total} notes were too quiet or unclear to measure. Sing out on a steady breath, keep the recorder close, and check you recorded the bars set above.`]);
-  if(r.pitchScore<85&&r.wrong) t.push(['Wrong notes',`${r.wrong} note${r.wrong>1?'s were':' was'} a semitone or more away from the written pitch. Practise the bars listed below slowly with only your part playing, then add the other voices back.`]);
+  if(r.missed>r.total*0.15) t.push(['Some notes didn’t come through',`${r.missed} of ${r.total} notes were too quiet or unclear to measure. Sing out on a steady breath, keep the recorder close, and check you recorded the ${rangeWord()} set above.`]);
+  if(r.pitchScore<85&&r.wrong) t.push(['Wrong notes',`${r.wrong} note${r.wrong>1?'s were':' was'} a semitone or more away from the written pitch. ${isChant()?'Practise the phrases listed below slowly, then build back up to speed.':'Practise the bars listed below slowly with only your part playing, then add the other voices back.'}`]);
   if(r.bias<=-8) t.push(['You tend to sing flat',`On average your notes sat ${c(r.bias)} cents under pitch. Think of each note from slightly above, keep the soft palate lifted, and keep the breath support going right to the end of each phrase.`]);
   else if(r.bias>=8) t.push(['You tend to sing sharp',`On average your notes sat ${c(r.bias)} cents above pitch. Push less: relax the jaw and neck and use a little less breath pressure, especially on loud or high notes.`]);
   if(r.drift<=-12) t.push(['Pitch sinks as you go',`You ended about ${c(r.drift)} cents lower than you started. Take fuller breaths at the rests and re-tune from the other voices at each phrase start.`]);
@@ -1254,7 +1283,7 @@ function coachTips(r){
   return t.slice(0,5);
 }
 function describeBar(b){
-  if(b.wrong.length){const n=b.wrong.sort((x,y)=>Math.abs(y.cents)-Math.abs(x.cents))[0];return `beat ${+n.beat.toFixed(2)}: you sang about ${nName(n.sung)} instead of ${nName(n.m)}${b.wrong.length>1?` (and ${b.wrong.length-1} more wrong note${b.wrong.length>2?'s':''})`:''}`;}
+  if(b.wrong.length){const n=b.wrong.sort((x,y)=>Math.abs(y.cents)-Math.abs(x.cents))[0];return `${isChant()?'':'beat '+(+n.beat.toFixed(2))+': '}you sang about ${nName(n.sung)} instead of ${nName(n.m)}${b.wrong.length>1?` (and ${b.wrong.length-1} more wrong note${b.wrong.length>2?'s':''})`:''}`;}
   if(b.missed) return `${b.missed} note${b.missed>1?'s':''} too quiet or unclear to measure`;
   const m=meanOf(b.off); return `notes ${Math.round(Math.abs(m))} cents ${m<0?'flat':'sharp'} on average`;
 }
@@ -1262,14 +1291,14 @@ function scoreColor(v){return v>=80?'var(--t)':v>=60?'var(--a)':'var(--s)';}
 function renderCoach(r){
   const tile=(main,label,val,det)=>`<div class="score${main?' main':''}"><span class="what">${label}</span><span class="num">${val==null?'–':val}${val==null?'':'<small>/100</small>'}</span><span class="det">${det}</span><div class="meter"><span style="width:${val||0}%;background:${scoreColor(val||0)}"></span></div></div>`;
   $('scores').innerHTML=
-    tile(true,'Overall',r.overall,`${VNAME[r.voice]} · bars ${r.from}–${r.to}`)+
+    tile(true,'Overall',r.overall,`${VNAME[r.voice]} · ${rangeWord()} ${r.from}–${r.to}`)+
     tile(false,'Right notes',r.pitchScore,`${r.right} of ${r.total} notes${r.missed?` · ${r.missed} not heard`:''}`)+
     tile(false,'Intonation',r.right?r.intonScore:null,r.right?`±${Math.round(r.absC)} cents · ${Math.abs(r.bias)<4?'centred':Math.round(Math.abs(r.bias))+' cents '+(r.bias<0?'flat':'sharp')}`:'no notes in tune to measure')+
     tile(false,'Rhythm',r.rhythmScore,r.rhythmScore==null?'not enough note changes to time':`±${Math.round(r.absOn)} ms off the beat · tempo ${r.tempoPct}%`);
   $('keyNote').textContent=r.oct?`You sang an octave ${r.oct>0?'higher':'lower'} than written; the chart shows it moved to the written octave.`:'';
   $('tips').innerHTML=coachTips(r).map(([a,b])=>`<li><strong>${esc(a)}</strong><span>${esc(b)}</span></li>`).join('');
-  $('worstH').hidden=!r.worst.length; $('worst').hidden=!r.worst.length;
-  $('worst').innerHTML=r.worst.map(b=>`<li><span class="w"><b>Bar ${b.bar}</b> · ${esc(describeBar(b))}</span><button class="btn" data-bar="${b.bar}">Loop this bar</button></li>`).join('');
+  $('worstH').textContent=isChant()?'Phrases to practise':'Bars to practise'; $('worstH').hidden=!r.worst.length; $('worst').hidden=!r.worst.length;
+  $('worst').innerHTML=r.worst.map(b=>`<li><span class="w"><b>${unitWord()} ${b.bar}</b> · ${esc(describeBar(b))}</span><button class="btn" data-bar="${b.bar}">Loop this ${unitWord().toLowerCase()}</button></li>`).join('');
   $('worst').querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
     const b=+btn.dataset.bar; $('from').value=Math.max(1,b); $('to').value=Math.min(score.measures.length,b); $('loop').checked=true;
     sel=new Set([r.voice]); renderChips(); applyGains(); applyDim(); setRange();
@@ -1323,11 +1352,11 @@ $('recFile').addEventListener('change',async e=>{
     st.textContent='Opening the recording…';
     const x=await decodeRec(f);
     const [fmin,fmax]=COACH_F[v];
-    const {P,hop}=await trackPitch(x,CSR,fmin/1.9,fmax*1.9,p=>{st.textContent=`Listening to your pitch… ${Math.round(p*100)}%`;});
+    const {P,hop}=await trackPitch(x,CSR,isChant()?55:fmin/1.9,isChant()?950:fmax*1.9,p=>{st.textContent=`Listening to your pitch… ${Math.round(p*100)}%`;});
     st.textContent='Lining your recording up with the music…'; await new Promise(r=>setTimeout(r,0));
     const dur=E[E.length-1].e;
-    const al=alignRec(P,hop,E,dur);
-    if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Your singing couldn’t be matched to the ${VNAME[v]} part in bars ${fromBar}–${toBar}. Check the part, bars and transposition above match what you sang, and that the recording holds mainly your voice.`; return; }
+    const al=alignRec(P,hop,E,dur,isChant()?{kMin:0.75,kMax:1.3}:null);
+    if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Your singing couldn’t be matched to ${isChant()?'the chant':'the '+VNAME[v]+' part'} in ${rangeWord()} ${fromBar}–${toBar}. Check the part, bars and transposition above match what you sang, and that the recording holds mainly your voice.`; return; }
     const r=analyseRec(P,hop,E,al);
     coachRes={...r,P,hop,E,dur,voice:v,from:fromBar,to:toBar,bpm,rs:rangeStart(),title:score.title,file:f.name};
     st.textContent=`Analysed ${f.name}. Your singing starts ${al.o>=0?al.o.toFixed(1)+' s into':'just before'} the recording.`;
@@ -1336,6 +1365,159 @@ $('recFile').addEventListener('change',async e=>{
 });
 window.addEventListener('resize',()=>{ clearTimeout(window.__cT); window.__cT=setTimeout(drawCoach,200); });
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawCoach);}catch(e){}
+
+/* =========================================================
+   Gregorian chant: gabc, drawn in square notation by exsurge
+   ========================================================= */
+const CHANT_TARGET={low:50,high:62};          // median pitch of the chant: D3 for low voices, D4 for high
+let chantVoice=lsGet('satb:chantVoice')==='high'?'high':'low';
+const isChant=()=>!!(score&&score.kind==='chant');
+const unitWord=()=>isChant()?'Phrase':'Bar';
+const rangeWord=()=>isChant()?'phrases':'bars';
+
+/* Read a .gabc file: header fields above the %% line, notes below. St. Gall neumes (nabc) are dropped. */
+function parseGabcFile(text,fallback){
+  const lines=String(text).replace(/\r/g,'').split('\n');
+  const cut=lines.findIndex(l=>l.trim()==='%%');
+  const head=cut>=0?lines.slice(0,cut):[], body=(cut>=0?lines.slice(cut+1):lines).filter(l=>!/^\s*%/.test(l)).join('\n');
+  const meta={};
+  head.forEach(l=>{ if(/^\s*%/.test(l)) return; const m=/^\s*([A-Za-z-]+)\s*:\s*(.*?)\s*;?\s*$/.exec(l); if(m) meta[m[1].toLowerCase()]=m[2]; });
+  let gabc=body.trim();
+  if(meta['nabc-lines']) gabc=gabc.replace(/\(([^)]*)\)/g,(_,inner)=>'('+inner.split('|').filter((_,k)=>k%2===0).join('')+')');
+  // a clef inside the first syllable, as in Pó(c3eh/hi), loses that syllable when drawn: give the clef its own group
+  gabc=gabc.replace(/^([^\s(]+)\(((?:cb|c|f)[1-4])\s*([^)]*)\)/,(m,txt,clef,rest)=>`(${clef}) ${txt}(${rest})`);
+  if(!/\([cf]b?[1-4]/.test(gabc)) throw new Error('This gabc file has no clef, so its pitches can’t be read.');
+  return {title:(meta.name||fallback||'Chant').trim(),officePart:meta['office-part']||'',mode:meta.mode||'',gabc};
+}
+
+/* Turn a gabc file into the player's score: one line of notes timed in pulses (Solesmes style). */
+function chantFromGabc(file){
+  const ex=window.exsurge; if(!ex) throw new Error('The chant engraver could not load. Reopen the app while online once.');
+  const ctxt=new ex.ChantContext();
+  const sc=new ex.ChantScore(ctxt,ex.Gabc.createMappingsFromSource(ctxt,file.gabc),false);
+  const raw=[], phrases=[{i:0,words:[]}], LT=ex.LyricType||{};
+  for(const nt of sc.notations){
+    const ly=nt.lyrics&&nt.lyrics[0]&&nt.lyrics[0].text?nt.lyrics[0]:null;
+    if(ly){ const w=phrases[phrases.length-1].words, starts=ly.lyricType===LT.BeginningSyllable||ly.lyricType===LT.SingleSyllable||!w.length;
+      const txt=String(ly.text).replace(/[*†]/g,'').trim(); if(txt){ if(starts) w.push(txt); else w[w.length-1]+=txt; } }
+    if(nt.notes&&nt.notes.length){
+      nt.notes.forEach(n=>{
+        if(!n.pitch) return;
+        let d=1;
+        if(n.morae&&n.morae.length) d=2;                        // dot: doubled
+        else if(n.episemata&&n.episemata.length) d=1.5;         // horizontal episema: lengthened
+        if(n.shape===ex.NoteShape.Quilisma&&raw.length){ const p=raw[raw.length-1]; if(p.d<1.5) p.d=1.5; } // note before a quilisma is lengthened
+        if(n.liquescent&&!(n.liquescent&16)&&d===1) d=0.8;      // liquescent: lighter
+        raw.push({p:n.pitch.toInt(),d,idx:n.noteIndex});
+      });
+    } else if((ex.FullBar&&nt instanceof ex.FullBar)||(ex.DoubleBar&&nt instanceof ex.DoubleBar)){
+      if(raw.length){ raw[raw.length-1].gap=1.5; phrases.push({i:raw.length,words:[]}); }
+    } else if(ex.HalfBar&&nt instanceof ex.HalfBar){
+      if(raw.length){ raw[raw.length-1].gap=1; phrases.push({i:raw.length,words:[]}); }
+    } else if(ex.QuarterBar&&nt instanceof ex.QuarterBar){
+      if(raw.length) raw[raw.length-1].gap=Math.max(raw[raw.length-1].gap||0,0.4);
+    }
+  }
+  if(raw.length<2) throw new Error('No chant notes were found in this file.');
+  const ph=phrases.filter(p=>p.i<raw.length);
+  let t=0; raw.forEach(r=>{ r.t=t; t+=r.d+(r.gap||0); });
+  const ps=raw.map(r=>r.p).sort((a,b)=>a-b), shift=CHANT_TARGET[chantVoice]-ps[ps.length>>1];
+  const notes=raw.map(r=>({t:r.t,d:r.d,m:r.p+shift}));
+  return {kind:'chant',src:file,title:file.title,composer:[file.officePart,file.mode?'Mode '+file.mode:''].filter(Boolean).join(' · '),
+    gabc:file.gabc,raw,tempo:150,beatsPerBar:4,measures:ph.map(p=>raw[p.i].t),
+    phraseLabels:ph.map((p,k)=>`${k+1} · ${p.words.slice(0,3).join(' ')||'…'}`),
+    lines:[{label:'Chant',pi:0,partName:'Chant',solo:true,voice:'S',notes,avg:CHANT_TARGET[chantVoice]}],end:t,xml:null};
+}
+
+/* ---------- drawing and following the chant ---------- */
+const chantMap={evs:[],lit:null,ready:false,width:0};
+async function renderChantSheet(){
+  const my=++renderSeq, ex=window.exsurge, box=$('chantSvg');
+  sheet.ready=false; chantMap.ready=false; $('playline').style.display='none'; $('osmd').hidden=true; box.hidden=false;
+  if(!ex){ sheetMsg('The chant engraver could not load. The piano roll still works.'); return; }
+  sheetMsg('Engraving the chant…');
+  try{
+    const w=$('paper').clientWidth-28; chantMap.width=$('paper').clientWidth;
+    const ctxt=new ex.ChantContext();
+    if(ctxt.setStaffHeight) ctxt.setStaffHeight(w<440?30:36);
+    ctxt.setFont("Georgia, 'Times New Roman', serif",w<440?15:17);
+    ctxt.dropCapTextFont=ctxt.lyricTextFont; ctxt.annotationTextFont=ctxt.lyricTextFont;
+    if(ex.TextMeasuringStrategy) ctxt.textMeasuringStrategy=ex.TextMeasuringStrategy.Canvas;
+    const sc=new ex.ChantScore(ctxt,ex.Gabc.createMappingsFromSource(ctxt,score.gabc),true);
+    await new Promise(r=>sc.performLayoutAsync(ctxt,r));
+    if(my!==renderSeq) return;
+    await new Promise(r=>sc.layoutChantLines(ctxt,w,r));
+    if(my!==renderSeq) return;
+    box.innerHTML=''; box.appendChild(sc.createSvgNode(ctxt));
+    buildChantMap(ctxt.noteIdPrefix||'note-');
+    sheet.stale=false; sheetMsg('');
+  }catch(e){ console.error(e); if(my===renderSeq) sheetMsg('This chant could not be drawn. The piano roll still works.'); }
+}
+function buildChantMap(prefix){
+  const pr=$('paper').getBoundingClientRect(), svg=$('chantSvg').querySelector('svg'), notes=score.lines[0].notes;
+  const evs=[]; let prev=null;
+  score.raw.forEach((r,k)=>{
+    const el=svg.querySelector('#'+CSS.escape(prefix+(r.idx+1)));
+    const g=el&&el.closest('g.chantLine'), staff=g&&g.querySelector('g.staffLines');
+    let x, line=null, top, bottom;
+    if(el&&staff){
+      const bb=el.getBoundingClientRect(), sb=staff.getBoundingClientRect();
+      x=bb.left-pr.left+Math.min(bb.width/2,6); line=g; top=sb.top-pr.top-8; bottom=sb.bottom-pr.top+8;
+      top=Math.min(top,bb.top-pr.top-4); bottom=Math.max(bottom,bb.bottom-pr.top+4);
+    } else if(prev){ x=prev.x+8; line=prev.line; top=prev.top; bottom=prev.bottom; }
+    else return;
+    const ev={k,b:notes[k].t,e:notes[k].t+notes[k].d,x,line,top,bottom,el:(el&&el.getAttribute('class')||'').includes('note')?el:null};
+    evs.push(ev); prev=ev;
+  });
+  // the end of each line of music, for the playhead to run to before it wraps
+  evs.forEach((ev,i)=>{ const nx=evs[i+1]; ev.nextX=nx&&nx.line===ev.line?nx.x:ev.x+14; ev.nextB=nx?nx.b:ev.e; });
+  chantMap.evs=evs; chantMap.lit=null; chantMap.ready=true; sheet.ready=true;
+  updateChantSheet(currentBeat());
+}
+function updateChantSheet(beat){
+  const evs=chantMap.evs, line=$('playline'); if(!chantMap.ready||!evs.length) return;
+  let lo=0,hi=evs.length-1; while(lo<hi){const mid=(lo+hi+1)>>1; if(evs[mid].b<=beat+1e-9) lo=mid; else hi=mid-1;}
+  const ev=evs[lo], span=Math.max(1e-6,ev.nextB-ev.b), r=clamp((beat-ev.b)/span,0,1);
+  const x=beat<ev.b?ev.x:ev.x+(ev.nextX-ev.x)*r;
+  line.style.display='block'; line.style.height=(ev.bottom-ev.top)+'px'; line.style.transform=`translate(${x-1}px,${ev.top}px)`;
+  const on=playing&&beat>=ev.b-1e-6&&beat<ev.e?ev:null;
+  if(chantMap.lit!==on){ if(chantMap.lit&&chantMap.lit.el) chantMap.lit.el.classList.remove('on'); if(on&&on.el) on.el.classList.add('on'); chantMap.lit=on; }
+  if(playing&&$('follow').checked){
+    const key=Math.round(ev.top);
+    if(key!==lastScrollKey){
+      lastScrollKey=key;
+      const pr=$('paper').getBoundingClientRect(), tr=document.querySelector('.transport').getBoundingClientRect();
+      const top=pr.top+ev.top, bot=pr.top+ev.bottom+30, room=tr.top-12;
+      if(top<12||bot>room) window.scrollTo({top:Math.max(0,window.scrollY+top-Math.min(90,room*0.15)),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+    }
+  }
+}
+function chantClick(e){
+  if(!chantMap.ready) return;
+  const r=$('paper').getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  let best=null,bd=1e9;
+  chantMap.evs.forEach(ev=>{ if(y<ev.top-30||y>ev.bottom+40) return; const d=Math.abs(ev.x-x); if(d<bd){bd=d;best=ev;} });
+  if(best&&bd<40) jumpTo(best.b);
+}
+
+/* ---------- switching between choir and chant ---------- */
+function applyMode(){
+  const c=isChant();
+  VNAME.S=c?'Chant':'Soprano';
+  if(c) sel=new Set(VOICES);
+  $('voicesSec').hidden=c; $('mini').hidden=c; $('othersRow').hidden=c; $('mapBox').hidden=c; $('chantRow').hidden=!c;
+  $('rangeName').textContent=c?'Phrases':'Bars'; $('rangeHint').textContent=c?'Practise one phrase or a few':'Practise one passage';
+  $('countName').textContent=c?'Starting note':'Count-in'; $('loopHint').textContent=c?'Repeat the chosen phrases':'Repeat the chosen bars'; $('countHint').textContent=c?'Hear the first note before you start':'One bar of clicks before you start';
+  $('osmd').hidden=c; $('chantSvg').hidden=!c;
+  $('cvLow').setAttribute('aria-pressed',chantVoice==='low'); $('cvHigh').setAttribute('aria-pressed',chantVoice==='high');
+}
+function setChantVoice(v){
+  if(v===chantVoice||!isChant()) return;
+  chantVoice=v; lsSet('satb:chantVoice',v);
+  const src=score.src; loadScore(chantFromGabc(src),{keepTempo:true});
+}
+$('cvLow').addEventListener('click',()=>setChantVoice('low'));
+$('cvHigh').addEventListener('click',()=>setChantVoice('high'));
 
 /* =========================================================
    Live singing: microphone pitch while the player plays
@@ -1381,12 +1563,12 @@ async function startLive(){
   const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
   const ms=E.map(n=>n.m);
   liveTake={stream,src,an,v,E,raw:new Float32Array(an.fftSize),x:new Float32Array(Math.floor(an.fftSize/ds)),d:new Float32Array(Math.floor(an.fftSize/ds)),
-    ds,sr,fmin:fmin/1.6,fmax:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
+    ds,sr,fmin:isChant()?55:fmin/1.6,fmax:isChant()?950:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
     lo:Math.min(...ms)-3,hi:Math.max(...ms)+3,frame:0,
     C:{bg:col('--surface'),line:col('--line'),muted:col('--muted'),note:col('--'+v.toLowerCase()),t:col('--t'),a:col('--a'),s:col('--s'),hot:col('--hot')}};
   liveLoopPrev=$('loop').checked; $('loop').checked=false;
   $('liveLabel').textContent='Stop and score'; $('liveStrip').hidden=false; $('liveGot').textContent='Listening…'; $('liveWant').textContent='';
-  st.textContent=`Singing ${VNAME[v]}, bars ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
+  st.textContent=`Singing ${isChant()?'the chant':VNAME[v]}, ${rangeWord()} ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
   pos=rangeStart(); startPlayback(pos,$('count').checked);
   liveTake.t0=S0.passes[0].t0;
   requestAnimationFrame(liveFrame);
@@ -1451,11 +1633,11 @@ function stopLive(analyse){
   const dur=E[E.length-1].e;
   // timing is known from the player; only allow for microphone delay
   const al=alignRec(P,hop,E,dur,{direct:true,oMin:-start-0.1,oMax:-start+0.45});
-  if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Not enough of your singing matched the ${VNAME[L.v]} part. Check the microphone can hear you clearly and that you sang the bars shown.`; return; }
+  if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Not enough of your singing matched ${isChant()?'the chant':'the '+VNAME[L.v]+' part'}. Check the microphone can hear you clearly and that you sang the ${rangeWord()} shown.`; return; }
   const r=analyseRec(P,hop,E,al);
   const lastBar=Math.max(...E.map(n=>n.bar));
   coachRes={...r,P,hop,E,dur,voice:L.v,from:L.from,to:lastBar,bpm:L.bpm,rs:L.rs,title:score.title,file:'live take'};
-  st.className=''; st.textContent=E.length<L.E.length?`Live take scored up to bar ${lastBar} (you stopped before the end).`:'Live take scored.';
+  st.className=''; st.textContent=E.length<L.E.length?`Live take scored up to ${unitWord().toLowerCase()} ${lastBar} (you stopped before the end).`:'Live take scored.';
   renderCoach(coachRes);
   $('coach').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
 }

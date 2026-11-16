@@ -1,9 +1,10 @@
 // Offline cache for SATB Part Player. Bump VERSION on every release.
-const VERSION = 'satb-v1';
+const VERSION = 'satb-v2';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest',
-  'vendor/opensheetmusicdisplay.min.js', 'vendor/jszip.min.js',
+  'vendor/opensheetmusicdisplay.min.js', 'vendor/jszip.min.js', 'vendor/exsurge.min.js',
   'scores/sicut-cervus.xml', 'scores/hymne-a-la-nuit.xml',
+  'scores/populus-sion.gabc', 'scores/factus-est.gabc', 'scores/veni-sancte-spiritus.gabc',
   'fonts/young-serif-latin-400-normal.woff2',
   'fonts/figtree-latin-400-normal.woff2', 'fonts/figtree-latin-500-normal.woff2',
   'fonts/figtree-latin-600-normal.woff2', 'fonts/figtree-latin-700-normal.woff2',

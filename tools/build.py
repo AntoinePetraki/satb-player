@@ -108,7 +108,7 @@ rep('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.
 cut('/* =========================================================\n   Reading a PDF or photos with Claude','/* =========================================================\n   Library and file opening')
 
 # library kept on this phone
-cut('let db=null; const libDocs=new Map();','async function loadLibrary(id){',repl=r'''const libDocs=new Map(), LIBKEY='satb:library', BUNDLED={sicut:'scores/sicut-cervus.xml',hymne:'scores/hymne-a-la-nuit.xml'}, bundleCache={};
+cut('let db=null; const libDocs=new Map();','async function loadLibrary(id){',repl=r'''const libDocs=new Map(), LIBKEY='satb:library', BUNDLED={sicut:'scores/sicut-cervus.xml',hymne:'scores/hymne-a-la-nuit.xml',populus:'scores/populus-sion.gabc',factus:'scores/factus-est.gabc',veni:'scores/veni-sancte-spiritus.gabc'}, bundleCache={};
 function libLoad(){ try{ Object.entries(JSON.parse(lsGet(LIBKEY)||'{}')).forEach(([k,v])=>{ if(v&&typeof v.xml==='string') libDocs.set(k,v); }); }catch(e){} }
 function libStore(){ try{ localStorage.setItem(LIBKEY,JSON.stringify(Object.fromEntries(libDocs))); return true; }catch(e){ return false; } }
 function updateSaveBtn(){ $('saveLib').hidden=!score||currentSource!=='file'; $('delLib').hidden=!currentSource.startsWith('lib:'); $('delLib').textContent='Remove from library'; }
@@ -196,7 +196,7 @@ rep('''function halt(){
   clearInterval(timer); timer=null;''')
 
 # ---------- live singing ----------
-LIVE=open('/home/claude/satb-app/tools/live.js').read()
+LIVE=open('/home/claude/satb-app/tools/chant.js').read()+'\n'+open('/home/claude/satb-app/tools/live.js').read()
 rep('''/* ---------- Start ---------- */''',LIVE+'''\n/* ---------- Start ---------- */''')
 cut("if(lsGet('satb:lastScan'))","loadLibrary('sicut');")
 rep("getSampler().then(s=>{ if(!s) $('hint').textContent='MusicXML (.musicxml, .mxl) opens here. To read a PDF or photos, open this page on claude.ai.'; });\n","")
@@ -204,6 +204,7 @@ rep("loadLibrary('sicut');\ninitLibrary();","initLibrary();\nloadLibrary('sicut'
 rep('</script>\n','</script>\n</body>\n</html>\n') if s.rstrip().endswith('</script>') else None
 if not s.rstrip().endswith('</html>'): s=s.rstrip()+'\n</body>\n</html>\n'
 
+exec(open('/home/claude/satb-app/tools/patch_chant.py').read())
 for bad in ['getSampler','claude.use','scanUI','readScoreImages','sicutXml','satb:lastScan','askCoach','fonts.googleapis','cdn.jsdelivr','cdnjs']:
     assert bad not in s, 'leftover: '+bad
 open('/home/claude/satb-app/index.html','w').write(s)
