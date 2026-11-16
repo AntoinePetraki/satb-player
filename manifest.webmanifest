@@ -1,0 +1,16 @@
+{
+  "name": "SATB Part Player",
+  "short_name": "SATB Player",
+  "description": "Choir rehearsal player: follow the score, play any SATB voice at any tempo, and get coached on your singing.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EFF0F5",
+  "theme_color": "#1B1F3A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

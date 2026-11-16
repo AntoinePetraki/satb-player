@@ -1,0 +1,1471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SATB Part Player</title>
+<meta name="description" content="Choir rehearsal player: follow the score, play any SATB voice at any tempo, and get coached on your singing.">
+<meta name="theme-color" content="#EFF0F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11131D" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SATB Player">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+@font-face{font-family:"Young Serif";src:url(fonts/young-serif-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-600-normal.woff2) format("woff2");font-weight:600;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-700-normal.woff2) format("woff2");font-weight:700;font-display:swap}
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{-webkit-text-size-adjust:100%;background:#EFF0F5}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<style>
+/* Layout: one rehearsal column. Score on paper up top, sticky transport at the bottom edge, voices and practice controls below. */
+:root{
+  --bg:#EFF0F5; --surface:#FFFFFF; --ink:#1B1F3A; --muted:#5F6480; --line:#D9DBE6;
+  --s:#D2475E; --a:#C97D12; --t:#16857C; --b:#4753C4;
+  --paper:#FFFFFF; --paper-edge:#D9DBE6; --hot:#D6222F; --hot-soft:rgba(214,34,47,.14);
+  --display:"Young Serif", Georgia, "Times New Roman", serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11131D; --surface:#1A1D2B; --ink:#E9EAF3; --muted:#9A9EB8; --line:#2C3045;
+    --s:#F06C82; --a:#F0AC48; --t:#3CC2B6; --b:#8C96F4;
+    --paper:#F3F2EC; --paper-edge:#2C3045; --hot:#D6222F; --hot-soft:rgba(214,34,47,.16); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11131D; --surface:#1A1D2B; --ink:#E9EAF3; --muted:#9A9EB8; --line:#2C3045;
+  --s:#F06C82; --a:#F0AC48; --t:#3CC2B6; --b:#8C96F4;
+  --paper:#F3F2EC; --paper-edge:#2C3045; --hot:#D6222F; --hot-soft:rgba(214,34,47,.16); color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 0}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-direction:column;gap:2px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,6vw,38px);line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0;font-size:15px}
+.sub b{color:var(--ink);font-weight:600}
+
+.load{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:10px;padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:42px}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn:focus-visible,.chip:focus-visible,select:focus-visible,input:focus-visible,.seg button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.hint{color:var(--muted);font-size:13px;margin:0;flex:1 1 100%;min-width:0}
+#status{font-size:14px;margin:0;color:var(--muted)}
+#status:empty{display:none}
+.err{color:var(--s)}
+select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:42px;max-width:100%}
+
+/* Score reading panel */
+.scan{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.scan-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.scan-head strong{font-weight:600;flex:1 1 200px;min-width:0}
+.bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:var(--ink);transition:width .3s}
+.scan p{margin:0;font-size:14px;color:var(--muted)}
+.scan ul{margin:0;padding-left:18px;font-size:13px;color:var(--muted);max-height:160px;overflow:auto}
+.thumbs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.thumbs img{height:46px;width:auto;border:1px solid var(--line);border-radius:4px;background:#fff;flex:none}
+.thumbs img.done{outline:2px solid var(--t);outline-offset:-2px}
+.thumbs img.now{outline:2px solid var(--hot);outline-offset:-2px}
+
+/* View switch */
+.viewbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{font:inherit;font-weight:600;border:0;background:transparent;color:var(--muted);padding:6px 14px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.legend{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--hot)}
+
+.paper{position:relative;background:var(--paper);border:1px solid var(--paper-edge);border-radius:14px;overflow:hidden;min-height:180px;cursor:pointer}
+#osmd{width:100%}
+#osmd svg{display:block}
+#playline{position:absolute;left:0;top:0;width:2px;height:0;background:var(--hot);box-shadow:0 0 0 4px var(--hot-soft);border-radius:2px;pointer-events:none;will-change:transform;display:none}
+#sheetMsg{position:absolute;inset:0;display:grid;place-items:center;color:#5F6480;font-size:14px;text-align:center;padding:20px}
+#sheetMsg:empty{display:none}
+/* note colouring inside the engraved score */
+#osmd .on path,#osmd .on rect,#osmd .on ellipse{fill:var(--hot)!important;stroke:var(--hot)!important}
+#osmd .dim{opacity:.32}
+
+.roll{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+canvas{display:block;width:100%;height:260px;cursor:pointer;touch-action:manipulation}
+
+/* Sticky transport */
+.transport{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:color-mix(in srgb, var(--bg) 92%, transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border-top:1px solid var(--line);margin-inline:-8px;padding:10px 8px 10px}
+.play{width:58px;height:58px;border-radius:50%;border:0;background:var(--ink);color:var(--bg);cursor:pointer;display:grid;place-items:center;flex:none}
+.play:focus-visible{outline:3px solid var(--b);outline-offset:3px}
+.play svg{width:24px;height:24px;fill:currentColor}
+.ghost{width:44px;height:44px;border-radius:50%;padding:0;justify-content:center;min-height:44px}
+.ghost svg{width:18px;height:18px;fill:currentColor}
+.mini{display:flex;gap:4px}
+.mini .chip{padding:4px 0;width:38px;border-radius:9px}
+.mini .chip .l{font-size:17px}
+.readout{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums}
+.readout .big{font-family:var(--display);font-size:22px;line-height:1}
+.readout .small{color:var(--muted);font-size:13px}
+
+.label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.chip{--c:var(--muted);font:inherit;cursor:pointer;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:12px;padding:10px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.chip .l{font-family:var(--display);font-size:24px;line-height:1;color:var(--c)}
+.chip .n{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.chip[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb, var(--c) 16%, var(--surface))}
+.chip[aria-pressed="true"] .n{color:var(--ink)}
+.chip:disabled{opacity:.35;cursor:not-allowed}
+.chip.all{--c:var(--ink)}
+.chip[data-v="S"]{--c:var(--s)} .chip[data-v="A"]{--c:var(--a)} .chip[data-v="T"]{--c:var(--t)} .chip[data-v="B"]{--c:var(--b)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px 16px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.row:first-child{border-top:0}
+.row > .name{flex:1 1 130px;min-width:0}
+.row .name strong{display:block;font-weight:600}
+.row .name span{display:block;color:var(--muted);font-size:13px}
+.ctl{display:flex;align-items:center;gap:10px;flex:1 1 220px;justify-content:flex-end;min-width:0}
+input[type=range]{flex:1;min-width:0;accent-color:var(--ink);height:28px}
+.val{font-variant-numeric:tabular-nums;min-width:62px;text-align:right;font-weight:600}
+.step{width:40px;height:40px;padding:0;justify-content:center;font-size:18px;min-height:40px}
+.panel select{background:var(--bg);min-height:40px}
+.switch{position:relative;width:48px;height:28px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;border-radius:99px;background:var(--line);transition:background .15s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.switch input:checked + span{background:var(--ink)}
+.switch input:checked + span::after{transform:translateX(20px)}
+.switch input:focus-visible + span{outline:2px solid var(--ink);outline-offset:2px}
+
+details{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+summary{cursor:pointer;font-weight:600}
+summary span{color:var(--muted);font-weight:400;font-size:13px}
+.map{margin-top:6px}
+.map .dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--line)}
+.spacer{height:24px}
+.livestrip{flex:1 1 100%;display:flex;flex-direction:column;gap:4px;min-width:0}
+#liveCv{height:92px;border-radius:10px;background:var(--surface);border:1px solid var(--line);cursor:default}
+.liveinfo{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.liveinfo b{color:var(--ink);font-weight:600}
+/* Voice coach */
+.coach{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.coach h2{font-family:var(--display);font-weight:400;font-size:24px;line-height:1.15;margin:0}
+.coach h3{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:4px 0 0}
+.coach-sub{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.coach-setup{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.coach-setup label{font-weight:600}
+.coach-what{color:var(--muted);font-size:13px;flex:1 1 220px;min-width:0}
+.howto{background:var(--bg);border:0;padding:10px 14px}
+.howto ol{margin:8px 0 2px;padding-left:20px;display:flex;flex-direction:column;gap:4px;font-size:14px;max-width:70ch}
+#coachStatus{margin:0;font-size:14px;color:var(--muted);flex:1 1 200px;min-width:0}
+#coachStatus:empty{display:none}
+.scores{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.score{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.score .num{font-family:var(--display);font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
+.score .num small{font-size:15px;color:var(--muted);font-family:var(--body)}
+.score .what{font-weight:600;font-size:14px}
+.score .det{font-size:12px;color:var(--muted)}
+.score .meter{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:6px}
+.score .meter span{display:block;height:100%;border-radius:99px}
+.score.main{background:var(--bg);border-color:transparent}
+.pchart{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+#pitchCv{height:230px;cursor:default}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.key i{display:inline-block;width:14px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.tips{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.tips li{display:flex;flex-direction:column;gap:2px;max-width:70ch}
+.tips strong{font-weight:600}
+.tips span{color:var(--muted);font-size:14px}
+.worst{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.worst li{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}
+.worst li:first-child{border-top:0;padding-top:0}
+.worst .w{flex:1 1 220px;min-width:0;font-size:14px}
+.worst .w b{font-weight:600}
+.worst .btn{min-height:36px;padding:6px 12px;font-size:14px}
+.ask{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+#coachText{white-space:pre-wrap;max-width:68ch;line-height:1.6}
+#coachText:empty{display:none}
+@media (max-width:620px){ .scores{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:520px){ .mini{display:none} .readout .big{font-size:19px} }
+@media (prefers-reduced-motion: reduce){ .switch span,.switch span::after,.bar span{transition:none} }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>SATB Part Player</h1>
+    <p class="sub" id="scoreTitle">Loading…</p>
+  </header>
+
+  <section class="load">
+    <select id="lib" aria-label="Choose a score">
+      <option value="sicut">Sicut Cervus · Palestrina</option>
+      <option value="hymne">Hymne à la nuit · Rameau</option>
+      <option value="old100">Old Hundredth · hymn</option>
+    </select>
+    <label class="btn primary" for="file">
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3l5 5h-3v6h-4V8H7l5-5zM5 18h14v2H5z"/></svg>
+      Open score
+    </label>
+    <button class="btn" id="saveLib" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+      Save to library
+    </button>
+    <button class="btn" id="delLib" hidden>Remove from library</button>
+    <input id="file" type="file" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" hidden>
+    <p class="hint" id="hint">Opens MusicXML files (.musicxml, .mxl). For a new piece as a PDF or photos, send it to Claude in your chat and it will be added to the app.</p>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="viewbar">
+    <div class="seg" role="group" aria-label="View">
+      <button id="vSheet" aria-pressed="true">Sheet</button>
+      <button id="vRoll" aria-pressed="false">Piano roll</button>
+    </div>
+    <span class="legend"><i></i>Notes turn red as they sound · tap the score to start there</span>
+  </section>
+
+  <section class="paper" id="paper" aria-label="Score. Tap a spot to start playing from there.">
+    <div id="osmd"></div>
+    <div id="playline"></div>
+    <div id="sheetMsg">Engraving the score…</div>
+  </section>
+  <section class="roll" id="rollBox" hidden><canvas id="roll" aria-label="Piano roll of the score. Tap to move the start point."></canvas></section>
+
+  <section class="transport">
+    <div class="livestrip" id="liveStrip" hidden>
+      <canvas id="liveCv" aria-label="Your live pitch against the notes of your part"></canvas>
+      <div class="liveinfo"><span id="liveWant"></span><span id="liveGot">Listening…</span></div>
+    </div>
+    <button class="play" id="play" aria-label="Play"></button>
+    <button class="btn ghost" id="stop" aria-label="Back to start"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12L18 6v12z"/></svg></button>
+    <div class="mini" id="mini" aria-label="Voices">
+      <button class="chip" data-v="S" aria-label="Soprano"><span class="l">S</span></button>
+      <button class="chip" data-v="A" aria-label="Alto"><span class="l">A</span></button>
+      <button class="chip" data-v="T" aria-label="Tenor"><span class="l">T</span></button>
+      <button class="chip" data-v="B" aria-label="Bass"><span class="l">B</span></button>
+    </div>
+    <div class="readout"><div class="big" id="bar">Bar 1</div><div class="small" id="barSub"></div></div>
+  </section>
+
+  <section>
+    <p class="label">Voices to hear</p>
+    <div class="chips" id="chips">
+      <button class="chip" data-v="S"><span class="l">S</span><span class="n">Soprano</span></button>
+      <button class="chip" data-v="A"><span class="l">A</span><span class="n">Alto</span></button>
+      <button class="chip" data-v="T"><span class="l">T</span><span class="n">Tenor</span></button>
+      <button class="chip" data-v="B"><span class="l">B</span><span class="n">Bass</span></button>
+      <button class="chip all" id="all"><span class="l">All</span><span class="n">Full choir</span></button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <div class="name"><strong>Tempo</strong><span id="tempoSub"></span></div>
+      <div class="ctl"><input type="range" id="tempo" min="30" max="220" step="1" aria-label="Tempo"><span class="val" id="tempoVal"></span></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Other voices</strong><span>Keep the rest of the choir softly in the background</span></div>
+      <div class="ctl"><input type="range" id="others" min="0" max="100" step="5" value="0" aria-label="Other voices volume"><span class="val" id="othersVal">Off</span></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Bars</strong><span>Practise one passage</span></div>
+      <div class="ctl"><select id="from" aria-label="From bar"></select><span>to</span><select id="to" aria-label="To bar"></select></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Loop</strong><span>Repeat the chosen bars</span></div>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="loop" aria-label="Loop"><span></span></label></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Count-in</strong><span>One bar of clicks before you start</span></div>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="count" aria-label="Count-in"><span></span></label></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Follow the music</strong><span>Scroll the score along while playing</span></div>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="follow" aria-label="Follow the music" checked><span></span></label></div>
+    </div>
+    <div class="row">
+      <div class="name"><strong>Transpose</strong><span>Move the sound up or down in semitones</span></div>
+      <div class="ctl"><button class="btn step" id="tDown" aria-label="Transpose down">−</button><span class="val" id="tVal" style="min-width:44px;text-align:center">0</span><button class="btn step" id="tUp" aria-label="Transpose up">+</button></div>
+    </div>
+  </section>
+
+  <section class="coach" id="coach" aria-labelledby="coachH">
+    <div>
+      <h2 id="coachH">Voice coach</h2>
+      <p class="coach-sub">Sing your part live into the microphone, or upload a recording. You see your pitch against the notes, get scores for right notes, intonation and rhythm, and what to work on.</p>
+    </div>
+    <div class="coach-setup">
+      <label for="coachVoice">Your part</label><select id="coachVoice"></select>
+      <span class="coach-what" id="coachWhat"></span>
+    </div>
+    <details class="howto">
+      <summary>How to record</summary>
+      <ol>
+        <li>Pick your part, the bars and a tempo in the controls above. Slower is fine; the coach measures you at that tempo.</li>
+        <li>For live singing, wear headphones so the microphone hears only you. Without headphones, turn your own part off in “Voices to hear”. Tap <b>Sing live</b>, allow the microphone, and sing along: your pitch shows in the strip above the play button, and your results appear when the passage ends or you tap pause.</li>
+        <li>To use a recording instead, record yourself singing the same bars (only your voice on it) and tap <b>Upload recording</b>. The coach finds where you start on its own.</li>
+      </ol>
+    </details>
+    <div class="load">
+      <button class="btn primary" id="liveBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+        <span id="liveLabel">Sing live</span>
+      </button>
+      <label class="btn" for="recFile">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3l5 5h-3v6h-4V8H7l5-5zM5 18h14v2H5z"/></svg>
+        Upload recording
+      </label>
+      <input id="recFile" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.flac,video/mp4,video/quicktime" hidden>
+      <p id="coachStatus" role="status" aria-live="polite"></p>
+    </div>
+    <div id="coachOut" hidden>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="scores" id="scores"></div>
+        <h3>Your pitch against the notes</h3>
+        <div class="pchart"><canvas id="pitchCv" aria-label="Chart of your sung pitch over the written notes"></canvas></div>
+        <div class="key"><span><i style="background:var(--t)"></i>in tune (within 25 cents)</span><span><i style="background:var(--a)"></i>slightly off</span><span><i style="background:var(--s)"></i>wrong note</span><span id="keyNote"></span></div>
+        <h3>What to work on</h3>
+        <ul class="tips" id="tips"></ul>
+        <h3 id="worstH">Bars to practise</h3>
+        <ul class="worst" id="worst"></ul>
+      </div>
+    </div>
+  </section>
+
+  <details id="mapBox">
+    <summary>Part assignment <span id="mapSub"></span></summary>
+    <div class="map" id="map"></div>
+  </details>
+  <div class="spacer"></div>
+</main>
+
+<script src="vendor/opensheetmusicdisplay.min.js"></script>
+</body>
+</html>
+<script src="vendor/jszip.min.js"></script>
+<script>
+const VOICES=['S','A','T','B'];
+const VNAME={S:'Soprano',A:'Alto',T:'Tenor',B:'Bass'};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ICON_PLAY='<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+const ICON_PAUSE='<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+
+let score=null, voices={S:[],A:[],T:[],B:[]}, instVoices={}, minM=48, maxM=76;
+let sel=new Set(VOICES), others=0, bpm=80, transpose=0, fromBar=1, toBar=1;
+let pos=0, playing=false, S0=null, timer=null, wl=null;
+let actx=null, master=null, vGain={}, live=new Set();
+let viewOff=0, viewPpb=40, view='sheet';
+
+/* =========================================================
+   Tokens → MusicXML  (shared by the hymn and by score reading)
+   A note: {rest, step, alter, oct, d (quarter notes), tie}
+   ========================================================= */
+const DIV=24;
+const TYPES=[[96,'whole',0],[72,'half',1],[48,'half',0],[36,'quarter',1],[24,'quarter',0],[18,'eighth',1],[12,'eighth',0],[9,'16th',1],[6,'16th',0],[3,'32nd',0]];
+const TRIPS=[[32,'half'],[16,'quarter'],[8,'eighth'],[4,'16th']];
+function splitUnits(u){
+  const out=[]; let g=0;
+  while(u>=3 && g++<32){
+    if(u%3===0){const t=TYPES.find(([n])=>n<=u); out.push({u:t[0],type:t[1],dots:t[2]}); u-=t[0];}
+    else{const t=TRIPS.find(([n])=>n<=u); if(!t) break; out.push({u:t[0],type:t[1],dots:0,tm:true}); u-=t[0];}
+  }
+  return out;
+}
+const CLEFS={treble:['G',2,0],treble8vb:['G',2,-1],bass:['F',4,0],alto:['C',3,0],tenor:['C',4,0]};
+function noteXml(n,c,tStart,tStop,mRest,units){
+  let s='<note>';
+  if(n.rest) s+=mRest?'<rest measure="yes"/>':'<rest/>';
+  else s+=`<pitch><step>${n.step}</step>${n.alter?`<alter>${n.alter}</alter>`:''}<octave>${n.oct}</octave></pitch>`;
+  s+=`<duration>${mRest?units:c.u}</duration>`;
+  if(tStop) s+='<tie type="stop"/>';
+  if(tStart) s+='<tie type="start"/>';
+  s+='<voice>1</voice>';
+  if(!mRest) s+=`<type>${c.type}</type>`+'<dot/>'.repeat(c.dots);
+  if(c&&c.tm) s+='<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>';
+  if(tStart||tStop) s+='<notations>'+(tStop?'<tied type="stop"/>':'')+(tStart?'<tied type="start"/>':'')+'</notations>';
+  return s+'</note>';
+}
+function tokensToXML(T){
+  const L=Math.round(T.beats*4/T.beatType*DIV);
+  const out=['<?xml version="1.0" encoding="UTF-8"?>','<score-partwise version="3.1">',
+    `<work><work-title>${esc(T.title||'Untitled score')}</work-title></work>`,
+    `<identification>${T.composer?`<creator type="composer">${esc(T.composer)}</creator>`:''}</identification>`,'<part-list>'];
+  T.parts.forEach((p,i)=>out.push(`<score-part id="P${i+1}"><part-name>${esc(p.name)}</part-name></score-part>`));
+  out.push('</part-list>');
+  T.parts.forEach((p,i)=>{
+    out.push(`<part id="P${i+1}">`);
+    let prevTie=false;
+    p.bars.forEach((bar,bi)=>{
+      out.push(`<measure number="${bi+1}">`);
+      if(bi===0){
+        const c=CLEFS[p.clef]||CLEFS.treble;
+        out.push(`<attributes><divisions>${DIV}</divisions><key><fifths>${T.keyFifths|0}</fifths></key><time><beats>${T.beats}</beats><beat-type>${T.beatType}</beat-type></time><clef><sign>${c[0]}</sign><line>${c[1]}</line>${c[2]?`<clef-octave-change>${c[2]}</clef-octave-change>`:''}</clef></attributes>`);
+        if(T.tempoQpm) out.push(`<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(T.tempoQpm)}</per-minute></metronome></direction-type><sound tempo="${Math.round(T.tempoQpm)}"/></direction>`);
+      }
+      if(bar.length===1 && bar[0].rest && Math.round(bar[0].d*DIV)===L){ out.push(noteXml(bar[0],null,false,false,true,L)); prevTie=false; }
+      else bar.forEach(n=>{
+        const ch=splitUnits(Math.round(n.d*DIV));
+        ch.forEach((c,j)=>{
+          const tStop=!n.rest&&(j>0||prevTie), tStart=!n.rest&&(j<ch.length-1||n.tie);
+          out.push(noteXml(n,c,tStart,tStop,false));
+        });
+        prevTie=!n.rest&&!!n.tie;
+      });
+      if(bi===p.bars.length-1) out.push('<barline location="right"><bar-style>light-heavy</bar-style></barline>');
+      out.push('</measure>');
+    });
+    out.push('</part>');
+  });
+  out.push('</score-partwise>');
+  return out.join('\n');
+}
+const ACC={'#':1,'##':2,'♯':1,'b':-1,'bb':-2,'♭':-1,'n':0,'':0};
+const TOK=/^(r|[A-Ga-g](?:##|#|♯|bb|b|♭|n)?-?\d)[:\/](\d*\.?\d+(?:\/\d+)?)(~?)$/;
+function parseTok(t){
+  const m=TOK.exec(t.trim()); if(!m) return null;
+  let d=m[2].includes('/')?(+m[2].split('/')[0])/(+m[2].split('/')[1]):parseFloat(m[2]);
+  d=Math.round(d*DIV)/DIV; if(!(d>0)) return null;
+  if(m[1].toLowerCase()==='r') return {rest:true,d};
+  const pm=/^([A-Ga-g])(##|#|♯|bb|b|♭|n)?(-?\d)$/.exec(m[1]);
+  return {rest:false,step:pm[1].toUpperCase(),alter:ACC[pm[2]||''],oct:parseInt(pm[3]),d,tie:m[3]==='~'};
+}
+const pitchKey=n=>n.step+n.alter+'_'+n.oct;
+/* Fit one bar to the bar length; returns {notes, issue} */
+function fitBar(str,L,isFirst){
+  const toks=String(str||'').trim().split(/\s+/).filter(Boolean);
+  const notes=[]; let bad=0;
+  toks.forEach(t=>{const n=parseTok(t); n?notes.push(n):bad++;});
+  let sum=notes.reduce((s,n)=>s+n.d,0), issue=null;
+  if(bad) issue=`${bad} unreadable note${bad>1?'s':''} skipped`;
+  if(sum<L-1e-6){
+    const gap=Math.round((L-sum)*DIV)/DIV;
+    if(isFirst) notes.unshift({rest:true,d:gap}); else notes.push({rest:true,d:gap});
+    if(!isFirst||notes.length===1) issue=(issue?issue+'; ':'')+`${+gap.toFixed(2)} beat${gap===1?'':'s'} missing, filled with rest`;
+  } else if(sum>L+1e-6){
+    let acc=0; const keep=[];
+    for(const n of notes){ if(acc>=L-1e-6) break; const d=Math.min(n.d,L-acc); keep.push({...n,d}); acc+=d; }
+    issue=(issue?issue+'; ':'')+`${+(sum-L).toFixed(2)} beat${sum-L===1?'':'s'} too long, end trimmed`;
+    notes.length=0; notes.push(...keep);
+  }
+  if(!notes.length) notes.push({rest:true,d:L});
+  return {notes,issue};
+}
+function cleanTies(bars){
+  const flat=bars.flat();
+  flat.forEach((n,i)=>{ if(n.rest||!n.tie) return; const nx=flat[i+1]; if(!nx||nx.rest||pitchKey(nx)!==pitchKey(n)) n.tie=false; });
+}
+
+/* ---------- Sample: Old Hundredth (Genevan Psalter, 1551) ---------- */
+const SHARPS=[['C',0],['C',1],['D',0],['D',1],['E',0],['F',0],['F',1],['G',0],['G',1],['A',0],['A',1],['B',0]];
+function hymnXML(){
+  const L={
+    S:[[67,67,66,64,62,67,69,71],[71,71,71,69,67,72,71,69],[67,69,71,69,67,64,66,67],[74,71,69,67,72,71,69,67]],
+    A:[[62,64,62,60,59,64,66,67],[67,67,67,66,64,64,67,66],[62,62,64,62,64,60,62,62],[67,67,66,64,67,67,66,62]],
+    T:[[59,59,57,55,55,60,62,62],[62,64,62,62,59,55,62,62],[59,57,55,54,55,57,57,59],[59,64,62,59,64,62,60,59]],
+    B:[[43,52,50,48,47,48,50,43],[55,52,47,50,52,48,47,50],[55,54,52,50,48,45,50,43],[55,52,50,52,48,50,50,43]]
+  };
+  const rh=[2,1,1,1,1,1,1,4], clef={S:'treble',A:'treble',T:'treble8vb',B:'bass'};
+  const parts=VOICES.map(v=>{
+    const bars=[]; let cur=[], acc=0;
+    L[v].forEach(ph=>ph.forEach((m,i)=>{
+      const [step,alter]=SHARPS[m%12];
+      cur.push({rest:false,step,alter,oct:Math.floor(m/12)-1,d:rh[i],tie:false}); acc+=rh[i];
+      if(acc>=4){bars.push(cur);cur=[];acc=0;}
+    }));
+    return {name:VNAME[v],clef:clef[v],bars};
+  });
+  return tokensToXML({title:'Old Hundredth',composer:'Genevan Psalter, 1551',keyFifths:1,beats:4,beatType:4,tempoQpm:80,parts});
+}
+
+/* =========================================================
+   MusicXML → playable score
+   ========================================================= */
+const STEP={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const kid=(el,name)=>{for(const c of el.children) if(c.tagName===name) return c; return null;};
+const kidText=(el,name)=>{const k=kid(el,name);return k?k.textContent.trim():null;};
+
+function parseMusicXML(text,fileName){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('This file is not valid MusicXML.');
+  const root=doc.documentElement;
+  if(root.tagName==='score-timewise') throw new Error('This MusicXML is in “timewise” layout. Re-export it from your notation app as standard MusicXML.');
+  if(root.tagName!=='score-partwise') throw new Error('This file is not a MusicXML score.');
+  const title=(doc.querySelector('work > work-title')?.textContent||doc.querySelector('movement-title')?.textContent||fileName.replace(/\.[^.]+$/,'')).trim();
+  const composer=(doc.querySelector('identification > creator[type="composer"]')?.textContent||'').trim();
+  const partNames={};
+  doc.querySelectorAll('part-list > score-part').forEach(sp=>{partNames[sp.getAttribute('id')]=(kidText(sp,'part-name')||sp.getAttribute('id')).trim();});
+  const parts=[...root.children].filter(c=>c.tagName==='part');
+  if(!parts.length) throw new Error('No parts found in this score.');
+  const lineMap=new Map(); const measures=[]; let tempo=null, beatsPerBar=null;
+
+  parts.forEach((part,pi)=>{
+    const pid=part.getAttribute('id');
+    let div=1,pos=0,lastStart=0; const pending={};
+    [...part.children].filter(c=>c.tagName==='measure').forEach((meas)=>{
+      if(pi===0) measures.push(pos);
+      for(const el of meas.children){
+        const tag=el.tagName;
+        if(tag==='attributes'){
+          const d=kidText(el,'divisions'); if(d) div=parseFloat(d)||1;
+          const tm=kid(el,'time');
+          if(tm && beatsPerBar==null){const b=parseFloat(kidText(tm,'beats')),bt=parseFloat(kidText(tm,'beat-type'));if(b&&bt) beatsPerBar=b*4/bt;}
+        } else if(tag==='backup'){ pos-=(parseFloat(kidText(el,'duration'))||0)/div; }
+        else if(tag==='forward'){ pos+=(parseFloat(kidText(el,'duration'))||0)/div; }
+        else if(tag==='direction'||tag==='sound'){
+          const s=tag==='sound'?el:el.querySelector('sound');
+          if(s && tempo==null && s.getAttribute('tempo')) tempo=parseFloat(s.getAttribute('tempo'));
+        } else if(tag==='note'){
+          if(kid(el,'grace')) continue;
+          const dur=(parseFloat(kidText(el,'duration'))||0)/div;
+          const isChord=!!kid(el,'chord');
+          const start=isChord?lastStart:pos;
+          if(!isChord){lastStart=pos;pos+=dur;}
+          const p=kid(el,'pitch'); if(kid(el,'rest')||!p) continue;
+          const m=(parseInt(kidText(p,'octave'))+1)*12+STEP[kidText(p,'step')]+(parseFloat(kidText(p,'alter'))||0);
+          const staff=kidText(el,'staff')||'1', voice=kidText(el,'voice')||'1';
+          const key=pi+'|'+staff+'|'+voice;
+          if(!lineMap.has(key)) lineMap.set(key,{pi,pid,staff,voice,notes:[]});
+          const ties=[...el.children].filter(c=>c.tagName==='tie').map(c=>c.getAttribute('type'));
+          const pk=key+'|'+m;
+          if(ties.includes('stop') && pending[pk]){
+            pending[pk].d=start+dur-pending[pk].t;
+            if(!ties.includes('start')) delete pending[pk];
+            continue;
+          }
+          const n={t:start,d:dur,m:Math.round(m)};
+          lineMap.get(key).notes.push(n);
+          if(ties.includes('start')) pending[pk]=n;
+        }
+      }
+    });
+  });
+
+  const perPart={}; lineMap.forEach(l=>{perPart[l.pi]=(perPart[l.pi]||0)+1;});
+  const lines=[];
+  lineMap.forEach(l=>{
+    if(!l.notes.length) return;
+    let label=partNames[l.pid]||('Part '+(l.pi+1));
+    if(perPart[l.pi]>1) label+=` · staff ${l.staff}, voice ${l.voice}`;
+    const byT=new Map(); l.notes.forEach(n=>{const k=n.t.toFixed(4);(byT.get(k)||byT.set(k,[]).get(k)).push(n);});
+    const chordal=[...byT.values()].some(g=>g.length>1);
+    if(!chordal){lines.push({label,pi:l.pi,partName:partNames[l.pid]||'',solo:perPart[l.pi]===1,notes:l.notes});return;}
+    const up=[],lo=[];
+    byT.forEach(g=>{g.sort((a,b)=>b.m-a.m);up.push({...g[0]});lo.push({...g[g.length-1]});});
+    lines.push({label:label+' (upper notes)',pi:l.pi,partName:'',solo:false,notes:up});
+    lines.push({label:label+' (lower notes)',pi:l.pi,partName:'',solo:false,notes:lo});
+  });
+  if(!lines.length) throw new Error('No pitched notes found in this score.');
+  lines.forEach(l=>{l.notes.sort((a,b)=>a.t-b.t||b.m-a.m);l.avg=l.notes.reduce((s,n)=>s+n.m,0)/l.notes.length;});
+  assignVoices(lines);
+  let end=Math.max(...lines.flatMap(l=>l.notes.map(n=>n.t+n.d)));
+  if(!measures.length) measures.push(0);
+  while(measures.length>1 && measures[measures.length-1]>=end-1e-6) measures.pop();
+  // the score lasts at least until the end of its last bar
+  const lastLen=measures.length>1?measures[measures.length-1]-measures[measures.length-2]:(beatsPerBar||4);
+  end=Math.max(end,measures[measures.length-1]+Math.min(lastLen,beatsPerBar||lastLen));
+  return {title,composer,xml:text,tempo:Math.round(tempo||90),beatsPerBar:beatsPerBar||4,measures,lines,end};
+}
+
+function assignVoices(lines){
+  const nameGuess=n=>{
+    if(/piano|organ|orgue|accomp|keyboard|clavier|guitar|guitare/i.test(n)) return '-';
+    if(/^\s*s\s*\.?\s*$|sop|treble|descant|dessus|cantus/i.test(n)) return 'S';
+    if(/^\s*a\s*\.?\s*$|alt|contralto/i.test(n)) return 'A';
+    if(/^\s*t\s*\.?\s*$|ten|ténor/i.test(n)) return 'T';
+    if(/^\s*b\s*\.?\s*$|bass|basse|bari/i.test(n)) return 'B';
+    return null;
+  };
+  lines.forEach(l=>{
+    const g=nameGuess(l.partName||'');
+    if(g==='-') l.voice='-';
+    else if(g && l.solo) l.voice=g;
+    else l.voice=null;
+  });
+  const un=lines.filter(l=>l.voice==null).sort((a,b)=>b.avg-a.avg);
+  const used=new Set(lines.map(l=>l.voice));
+  const missing=VOICES.filter(v=>!used.has(v));
+  if(un.length && un.length===missing.length){un.forEach((l,i)=>l.voice=missing[i]);return;}
+  const C={S:69,A:63,T:57,B:50};
+  un.forEach(l=>{let best='S',bd=1e9;VOICES.forEach(v=>{const d=Math.abs(l.avg-C[v]);if(d<bd){bd=d;best=v;}});l.voice=best;});
+}
+
+async function readMusicXMLFile(file){
+  const name=file.name.toLowerCase();
+  if(name.endsWith('.mxl')){
+    if(!window.JSZip) throw new Error('Could not open compressed .mxl files right now. Export as uncompressed .musicxml instead.');
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    let path=null;
+    const cont=zip.file('META-INF/container.xml');
+    if(cont){const x=new DOMParser().parseFromString(await cont.async('string'),'application/xml');path=x.querySelector('rootfile')?.getAttribute('full-path');}
+    if(!path) path=Object.keys(zip.files).find(p=>!p.startsWith('META-INF')&&/\.(xml|musicxml)$/i.test(p));
+    if(!path||!zip.file(path)) throw new Error('No score found inside this .mxl file.');
+    return parseMusicXML(await zip.file(path).async('string'),file.name);
+  }
+  return parseMusicXML(await file.text(),file.name);
+}
+
+/* ---------- Score state ---------- */
+function rebuildVoices(){
+  voices={S:[],A:[],T:[],B:[]}; instVoices={};
+  score.lines.forEach(l=>{
+    if(voices[l.voice]) voices[l.voice].push(...l.notes);
+    (instVoices[l.pi]||(instVoices[l.pi]=new Set())).add(l.voice);
+  });
+  VOICES.forEach(v=>voices[v].sort((a,b)=>a.t-b.t));
+  const all=VOICES.flatMap(v=>voices[v].map(n=>n.m));
+  minM=all.length?Math.min(...all):48; maxM=all.length?Math.max(...all):76;
+  if(maxM-minM<14){const c=(maxM+minM)/2;minM=Math.floor(c-7);maxM=Math.ceil(c+7);}
+  document.querySelectorAll('.chip[data-v]').forEach(ch=>{ch.disabled=!voices[ch.dataset.v].length;});
+  renderChips();
+}
+const rangeStart=()=>score.measures[fromBar-1]||0;
+const rangeEnd=()=>toBar<score.measures.length?score.measures[toBar]:score.end;
+
+function loadScore(s,{keepTempo=false}={}){
+  halt();
+  const oldTempo=bpm;
+  score=s; bpm=keepTempo?oldTempo:s.tempo; transpose=0; fromBar=1; toBar=s.measures.length; pos=0;
+  $('tempo').value=bpm; $('tVal').textContent='0';
+  ['from','to'].forEach(id=>{$(id).innerHTML=s.measures.map((_,i)=>`<option value="${i+1}">Bar ${i+1}</option>`).join('');});
+  $('from').value=1; $('to').value=toBar;
+  $('scoreTitle').innerHTML=`<b>${esc(s.title)}</b>${s.composer?' · '+esc(s.composer):''} · ${s.measures.length} bars`;
+  coachRes=null; $('coachOut').hidden=true; $('coachStatus').textContent='';
+  rebuildVoices(); renderMapping(); updateTempo(); updateReadout();
+  sheet.stale=true;
+  if(view==='sheet') renderSheet(); else draw();
+}
+
+function renderMapping(){
+  $('mapSub').textContent=`· ${score.lines.length} line${score.lines.length>1?'s':''} found`;
+  $('map').innerHTML=score.lines.map((l,i)=>`
+    <div class="row">
+      <span class="dot" style="background:${l.voice&&l.voice!=='-'?`var(--${l.voice.toLowerCase()})`:'var(--line)'}"></span>
+      <div class="name"><strong>${esc(l.label)}</strong><span>${l.notes.length} notes</span></div>
+      <select data-i="${i}" id="map${i}" aria-label="Voice for ${esc(l.label)}">
+        ${VOICES.map(v=>`<option value="${v}" ${l.voice===v?'selected':''}>${VNAME[v]}</option>`).join('')}
+        <option value="-" ${l.voice==='-'?'selected':''}>Don’t play</option>
+      </select>
+    </div>`).join('');
+  $('map').querySelectorAll('select').forEach(sl=>sl.addEventListener('change',()=>{
+    score.lines[+sl.dataset.i].voice=sl.value; rebuildVoices(); renderMapping(); applyDim(); restartIfPlaying(); draw(); refreshCoachSetup();
+  }));
+}
+
+/* =========================================================
+   Audio
+   ========================================================= */
+function setAudioSession(type){ try{ if(navigator.audioSession) navigator.audioSession.type=type; }catch(e){} }
+function ensureAudio(){
+  if(actx) return;
+  setAudioSession('playback');
+  actx=new (window.AudioContext||window.webkitAudioContext)();
+  master=actx.createGain(); master.gain.value=0.85;
+  const comp=actx.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=4;
+  master.connect(comp); comp.connect(actx.destination);
+  VOICES.forEach(v=>{vGain[v]=actx.createGain();vGain[v].connect(master);});
+  applyGains(true);
+}
+function applyGains(instant){
+  if(!actx) return;
+  VOICES.forEach(v=>{
+    const g=sel.has(v)?1:others/100*0.8;
+    if(instant) vGain[v].gain.value=g; else vGain[v].gain.setTargetAtTime(g,actx.currentTime,0.03);
+  });
+}
+function playNote(m,t,dur,v){
+  const f=440*Math.pow(2,(m+transpose-69)/12);
+  const o=actx.createOscillator(); o.type='sawtooth'; o.frequency.value=f;
+  const o2=actx.createOscillator(); o2.type='sine'; o2.frequency.value=f;
+  const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=Math.min(4200,f*5); lp.Q.value=0.5;
+  const g2=actx.createGain(); g2.gain.value=0.7;
+  const env=actx.createGain();
+  env.gain.setValueAtTime(0,t);
+  env.gain.linearRampToValueAtTime(0.15,t+0.02);
+  env.gain.setTargetAtTime(0.1,t+0.02,0.2);
+  const off=t+Math.max(0.06,dur-0.04);
+  env.gain.setTargetAtTime(0,off,0.03);
+  o.connect(lp); lp.connect(env); o2.connect(g2); g2.connect(env); env.connect(vGain[v]);
+  o.start(t); o2.start(t); o.stop(off+0.3); o2.stop(off+0.3);
+  const rec={o,o2,env}; live.add(rec); o.onended=()=>live.delete(rec);
+}
+function click(t,accent){
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.frequency.value=accent?1600:1100;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.002); g.gain.exponentialRampToValueAtTime(0.0001,t+0.06);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+0.08);
+  const rec={o,env:g}; live.add(rec); o.onended=()=>live.delete(rec);
+}
+function firstIdx(ev,b){const i=ev.findIndex(e=>e.t>=b-1e-6);return i<0?ev.length:i;}
+function startPlayback(fromBeat,withCount){
+  ensureAudio(); actx.resume();
+  const spb=60/bpm, rs=rangeStart(), re=rangeEnd();
+  if(!(fromBeat>=rs && fromBeat<re-1e-6)) fromBeat=rs;
+  const now=actx.currentTime+0.08; let t0=now;
+  if(withCount){const n=Math.max(1,Math.round(score.beatsPerBar));for(let i=0;i<n;i++) click(now+i*spb,i===0);t0=now+n*spb;}
+  const ev=[];
+  VOICES.forEach(v=>voices[v].forEach(n=>{if(n.t>=rs-1e-6&&n.t<re-1e-6) ev.push({t:n.t,d:Math.min(n.d,re-n.t),m:n.m,v});}));
+  // a note already sounding at the start point plays from there
+  VOICES.forEach(v=>voices[v].forEach(n=>{if(n.t<fromBeat-1e-6&&n.t+n.d>fromBeat+1e-6&&n.t>=rs-1e-6) ev.push({t:fromBeat,d:Math.min(n.t+n.d,re)-fromBeat,m:n.m,v,partial:true});}));
+  ev.sort((a,b)=>a.t-b.t);
+  S0={spb,rs,re,ev,passes:[{b0:fromBeat,t0}],idx:firstIdx(ev,fromBeat)};
+  playing=true; lastScrollKey=null; timer=setInterval(tick,25); tick();
+  try{navigator.wakeLock?.request('screen').then(l=>wl=l).catch(()=>{});}catch(e){}
+  renderPlay(); requestAnimationFrame(frame);
+}
+function tick(){
+  const st=S0; if(!st) return;
+  const now=actx.currentTime, ahead=now+0.25;
+  for(let guard=0;guard<4;guard++){
+    const p=st.passes[st.passes.length-1];
+    while(st.idx<st.ev.length){
+      const e=st.ev[st.idx];
+      if(e.partial && st.passes.length>1){st.idx++;continue;}
+      const tt=p.t0+(e.t-p.b0)*st.spb;
+      if(tt>ahead) return;
+      if(tt>=now-0.02) playNote(e.m,tt,e.d*st.spb,e.v);
+      st.idx++;
+    }
+    const passEnd=p.t0+(st.re-p.b0)*st.spb;
+    if(!$('loop').checked){ if(now>=passEnd+0.05){halt();pos=rangeStart();updateReadout();refreshView();} return; }
+    if(passEnd>ahead) return;
+    st.passes.push({b0:st.rs,t0:passEnd}); st.idx=firstIdx(st.ev,st.rs);
+    if(!st.ev.length) return;
+  }
+}
+function currentBeat(){
+  if(!S0) return pos;
+  const now=actx.currentTime; let p=S0.passes[0];
+  for(const q of S0.passes) if(q.t0<=now) p=q;
+  return Math.min(S0.re,p.b0+Math.max(0,now-p.t0)/S0.spb);
+}
+function halt(){
+  if(liveTake&&!liveTake.ending){ liveTake.ending=true; setTimeout(()=>stopLive(true),0); }
+  clearInterval(timer); timer=null;
+  if(actx){const now=actx.currentTime;live.forEach(r=>{try{r.env.gain.cancelScheduledValues(now);r.env.gain.setTargetAtTime(0,now,0.01);r.o.stop(now+0.06);r.o2&&r.o2.stop(now+0.06);}catch(e){}});}
+  live.clear(); S0=null; playing=false;
+  try{wl&&wl.release();}catch(e){} wl=null;
+  renderPlay();
+}
+function restartIfPlaying(){ if(playing){const b=currentBeat();halt();startPlayback(b,false);} }
+function togglePlay(){
+  if(!score) return;
+  if(playing){pos=currentBeat();halt();updateReadout();refreshView();}
+  else startPlayback(pos,$('count').checked);
+}
+function jumpTo(b){
+  if(!score||!(b>=0)||b>=score.end) return;
+  if(playing){halt();startPlayback(b,false);} else {pos=b;updateReadout();refreshView();}
+}
+function frame(){ refreshView(); updateReadout(); if(playing) requestAnimationFrame(frame); }
+function refreshView(){ if(view==='sheet') updateSheet(currentBeat()); else draw(); }
+
+/* =========================================================
+   Engraved score (OpenSheetMusicDisplay)
+   ========================================================= */
+let osmd=null, renderSeq=0, lastScrollKey=null;
+const sheet={meas:[],notes:[],byMeas:[],lit:new Set(),stale:true,ready:false,width:0};
+function sheetMsg(t){$('sheetMsg').textContent=t;}
+async function renderSheet(){
+  if(!score) return;
+  if(!window.opensheetmusicdisplay){ sheetMsg('The score view could not load. The piano roll still works.'); return; }
+  const my=++renderSeq; sheet.ready=false; $('playline').style.display='none';
+  sheetMsg('Engraving the score…');
+  try{
+    if(!osmd) osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay($('osmd'),{
+      autoResize:false, backend:'svg', drawTitle:true, drawSubtitle:false, drawComposer:true, drawLyricist:false,
+      drawCredits:true, drawPartNames:true, drawPartAbbreviations:true, drawMeasureNumbers:true, autoBeam:true,
+      followCursor:false, disableCursor:true });
+    await osmd.load(score.xml);
+    if(my!==renderSeq) return;
+    layoutSheet();
+    sheet.stale=false; sheetMsg('');
+  }catch(e){ console.error(e); if(my===renderSeq) sheetMsg('This score could not be drawn. The piano roll still works.'); }
+}
+function layoutSheet(){
+  const w=$('paper').clientWidth; sheet.width=w;
+  osmd.zoom=w<480?0.5:w<700?0.62:0.78;
+  osmd.render();
+  buildSheetMap();
+  sheet.ready=true; applyDim(); updateSheet(currentBeat());
+}
+function buildSheetMap(){
+  const unit=10*osmd.zoom;
+  const svg=$('osmd').querySelector('svg'); if(!svg) return;
+  const pr=$('paper').getBoundingClientRect(), sr=svg.getBoundingClientRect();
+  const ox=sr.left-pr.left, oy=sr.top-pr.top;
+  const insts=osmd.Sheet.Instruments;
+  sheet.meas=[]; sheet.notes=[]; sheet.byMeas=[]; sheet.lit=new Set();
+  osmd.GraphicSheet.MeasureList.forEach((row,i)=>{
+    const gms=(row||[]).filter(Boolean); if(!gms.length) return;
+    const start=score.measures[i]!=null?score.measures[i]:gms[0].parentSourceMeasure.AbsoluteTimestamp.RealValue*4;
+    const end=i+1<score.measures.length?score.measures[i+1]:score.end;
+    const f=gms[0].PositionAndShape, l=gms[gms.length-1].PositionAndShape;
+    const left=(f.AbsolutePosition.x+f.BorderLeft)*unit+ox, right=(f.AbsolutePosition.x+f.BorderRight)*unit+ox;
+    const top=(f.AbsolutePosition.y-1.6)*unit+oy, bottom=(l.AbsolutePosition.y+5.6)*unit+oy;
+    const pts=new Map(); const list=[];
+    gms.forEach(gm=>{
+      const inst=insts.indexOf(gm.ParentStaff.ParentInstrument);
+      gm.staffEntries.forEach(gse=>{
+        const b=start+gse.relInMeasureTimestamp.RealValue*4;
+        const x=gse.PositionAndShape.AbsolutePosition.x*unit+ox;
+        const k=b.toFixed(4); if(!pts.has(k)||pts.get(k)>x) pts.set(k,x);
+        gse.graphicalVoiceEntries.forEach(gve=>gve.notes.forEach(gn=>{
+          const sn=gn.sourceNote; if(!sn||sn.isRest()||sn.IsGraceNote) return;
+          let el=null; try{el=gn.getSVGGElement();}catch(e){}
+          if(!el) return;
+          const n={s:b,e:b+sn.Length.RealValue*4,el,inst};
+          sheet.notes.push(n); list.push(n);
+        }));
+      });
+    });
+    const P=[...pts].map(([k,x])=>({b:+k,x})).sort((a,b)=>a.b-b.b);
+    P.push({b:end,x:Math.max(right-0.6*unit,(P.length?P[P.length-1].x:left)+unit)});
+    for(let j=1;j<P.length;j++) if(P[j].x<P[j-1].x) P[j].x=P[j-1].x;
+    sheet.meas[i]={start,end,left,right,top,bottom,pts:P};
+    sheet.byMeas[i]=list;
+  });
+}
+function measureAt(b){
+  const M=score.measures; let lo=0,hi=M.length-1;
+  while(lo<hi){const mid=(lo+hi+1)>>1; if(M[mid]<=b+1e-9) lo=mid; else hi=mid-1;}
+  return lo;
+}
+function instOn(inst){ const vs=instVoices[inst]; if(!vs) return true; for(const v of vs) if(v!=='-'&&sel.has(v)) return true; return false; }
+function applyDim(){ sheet.notes.forEach(n=>n.el.classList.toggle('dim',!instOn(n.inst))); }
+function updateSheet(beat){
+  if(!sheet.ready||!score) return;
+  const i=measureAt(Math.min(beat,score.end-1e-6)), m=sheet.meas[i], line=$('playline');
+  if(!m){line.style.display='none';return;}
+  const P=m.pts; let x=P[0].x;
+  for(let j=0;j<P.length-1;j++){ if(beat>=P[j].b&&beat<=P[j+1].b){ const r=(beat-P[j].b)/Math.max(1e-6,P[j+1].b-P[j].b); x=P[j].x+(P[j+1].x-P[j].x)*r; break; } }
+  if(beat<P[0].b) x=P[0].x;
+  line.style.display='block';
+  line.style.height=(m.bottom-m.top)+'px';
+  line.style.transform=`translate(${x-1}px,${m.top}px)`;
+  // light the notes that are sounding
+  const now=new Set();
+  if(playing){
+    for(let k=Math.max(0,i-3);k<=i;k++) (sheet.byMeas[k]||[]).forEach(n=>{ if(n.s<=beat+1e-6&&beat<n.e-1e-6&&instOn(n.inst)) now.add(n); });
+  }
+  sheet.lit.forEach(n=>{ if(!now.has(n)) n.el.classList.remove('on'); });
+  now.forEach(n=>{ if(!sheet.lit.has(n)) n.el.classList.add('on'); });
+  sheet.lit=now;
+  // keep the current line of music in view
+  if(playing&&$('follow').checked){
+    const key=Math.round(m.top);
+    if(key!==lastScrollKey){
+      lastScrollKey=key;
+      const pr=$('paper').getBoundingClientRect(), tr=document.querySelector('.transport').getBoundingClientRect();
+      const top=pr.top+m.top, bot=pr.top+m.bottom, room=tr.top-12;
+      if(top<12||bot>room) window.scrollTo({top:Math.max(0,window.scrollY+top-Math.min(90,room*0.15)),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+    }
+  }
+}
+$('paper').addEventListener('click',e=>{
+  if(!sheet.ready) return;
+  const r=$('paper').getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  let best=-1;
+  sheet.meas.forEach((m,i)=>{ if(m&&y>=m.top-6&&y<=m.bottom+6&&x>=m.left-4&&x<=m.right+4) best=i; });
+  if(best<0) return;
+  const P=sheet.meas[best].pts; let b=P[0].b;
+  for(let j=0;j<P.length-1;j++){ if(x>=P[j].x&&x<=P[j+1].x){ b=P[j].b; break; } if(x>P[j+1].x) b=P[j+1].b; }
+  if(b>=sheet.meas[best].end) b=P[Math.max(0,P.length-2)].b;
+  jumpTo(b);
+});
+let rsT=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(rsT);
+  rsT=setTimeout(()=>{
+    if(view==='sheet'&&osmd&&sheet.ready&&Math.abs($('paper').clientWidth-sheet.width)>8){ try{layoutSheet();}catch(e){} }
+    else if(view==='roll') draw();
+  },200);
+});
+
+/* =========================================================
+   Library and file opening
+   ========================================================= */
+function setLibOption(val,label){
+  let o=$('lib').querySelector(`option[value="${val}"]`);
+  if(!o){o=document.createElement('option');o.value=val;$('lib').appendChild(o);}
+  o.textContent=label; $('lib').value=val;
+}
+let fileScore=null, currentSource='sicut';
+const libDocs=new Map(), LIBKEY='satb:library', BUNDLED={sicut:'scores/sicut-cervus.xml',hymne:'scores/hymne-a-la-nuit.xml'}, bundleCache={};
+function libLoad(){ try{ Object.entries(JSON.parse(lsGet(LIBKEY)||'{}')).forEach(([k,v])=>{ if(v&&typeof v.xml==='string') libDocs.set(k,v); }); }catch(e){} }
+function libStore(){ try{ localStorage.setItem(LIBKEY,JSON.stringify(Object.fromEntries(libDocs))); return true; }catch(e){ return false; } }
+function updateSaveBtn(){ $('saveLib').hidden=!score||currentSource!=='file'; $('delLib').hidden=!currentSource.startsWith('lib:'); $('delLib').textContent='Remove from library'; }
+const slug=t=>(String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'score').slice(0,60);
+function saveToLibrary(){
+  if(!score) return;
+  const st=$('status'), id=slug(score.title);
+  libDocs.set(id,{title:score.title,composer:score.composer||'',bars:score.measures.length,xml:score.xml.replace(/>\s+</g,'><'),savedAt:Date.now()});
+  if(!libStore()){ libDocs.delete(id); st.className='err'; st.textContent='This phone has no room left for the app’s library. Remove a score you no longer need, then try again.'; return; }
+  currentSource='lib:'+id; renderLibOptions(); $('lib').value='lib:'+id; updateSaveBtn();
+  st.className=''; st.textContent=`Saved “${score.title}” to the library on this phone.`;
+}
+$('saveLib').addEventListener('click',saveToLibrary);
+let delArmed=null;
+$('delLib').addEventListener('click',()=>{
+  const id=currentSource.slice(4); if(!libDocs.has(id)) return;
+  if(!delArmed){ $('delLib').textContent='Tap again to remove'; delArmed=setTimeout(()=>{delArmed=null;updateSaveBtn();},3000); return; }
+  clearTimeout(delArmed); delArmed=null;
+  const t=libDocs.get(id).title; libDocs.delete(id); libStore(); renderLibOptions();
+  $('lib').value='sicut'; loadLibrary('sicut').then(()=>{ $('status').textContent=`Removed “${t}” from the library.`; });
+});
+function renderLibOptions(){
+  $('lib').querySelectorAll('option[value^="lib:"]').forEach(o=>o.remove());
+  const keep=$('lib').value;
+  [...libDocs].sort((a,b)=>String(a[1].title).localeCompare(String(b[1].title))).forEach(([id,d])=>{
+    const o=document.createElement('option'); o.value='lib:'+id; o.textContent=`${d.title}${d.composer?' · '+d.composer:''}`;
+    $('lib').insertBefore(o,$('lib').querySelector('option[value="file"]'));
+  });
+  if(currentSource.startsWith('lib:')&&libDocs.has(currentSource.slice(4))) $('lib').value=currentSource; else if([...$('lib').options].some(o=>o.value===keep)) $('lib').value=keep;
+}
+function initLibrary(){ libLoad(); renderLibOptions(); updateSaveBtn(); }
+async function loadLibrary(id){
+  const st=$('status'); st.className=''; st.textContent='';
+  currentSource=id;
+  try{
+    if(id.startsWith('lib:')){ const d=libDocs.get(id.slice(4)); if(!d) throw new Error(); loadScore(parseMusicXML(d.xml,d.title)); updateSaveBtn(); return; }
+    if(id==='old100') loadScore(parseMusicXML(hymnXML(),'Old Hundredth'));
+    else if(BUNDLED[id]){
+      if(!bundleCache[id]){ const r=await fetch(BUNDLED[id]); if(!r.ok) throw new Error(); bundleCache[id]=await r.text(); }
+      loadScore(parseMusicXML(bundleCache[id],id));
+    } else if(id==='file'&&fileScore) loadScore(fileScore);
+  }catch(e){
+    st.className='err'; st.textContent='That score could not be opened. Showing Old Hundredth instead.';
+    $('lib').value='old100'; currentSource='old100'; loadScore(parseMusicXML(hymnXML(),'Old Hundredth'));
+  }
+  updateSaveBtn();
+}
+$('lib').addEventListener('change',e=>loadLibrary(e.target.value));
+$('file').addEventListener('change',async e=>{
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  const st=$('status'); st.className=''; st.textContent='';
+  const isXml=f=>/\.(musicxml|xml|mxl)$/i.test(f.name);
+  try{
+    if(files.some(isXml)){
+      const f=files.find(isXml); st.textContent='Opening '+f.name+'…';
+      const s=await readMusicXMLFile(f); fileScore=s; currentSource='file'; loadScore(s); setLibOption('file',s.title); updateSaveBtn();
+      const found=VOICES.filter(v=>voices[v].length).map(v=>VNAME[v]).join(', ');
+      st.textContent=`Loaded. Voices found: ${found||'none'}. Check “Part assignment” at the bottom if a part landed in the wrong voice.`;
+    } else {
+      st.className='err'; st.textContent='The app opens MusicXML files only. For a PDF or photos, send them to Claude in your chat and the score will be added to the app.';
+    }
+  }catch(err){ console.error(err); st.className='err'; st.textContent=err.message||'Could not read this file.'; }
+});
+
+/* =========================================================
+   UI
+   ========================================================= */
+function renderPlay(){ $('play').innerHTML=playing?ICON_PAUSE:ICON_PLAY; $('play').setAttribute('aria-label',playing?'Pause':'Play'); }
+function renderChips(){
+  document.querySelectorAll('.chip[data-v]').forEach(ch=>ch.setAttribute('aria-pressed',sel.has(ch.dataset.v)&&!ch.disabled));
+  const avail=VOICES.filter(v=>voices[v].length);
+  $('all').setAttribute('aria-pressed',avail.every(v=>sel.has(v)));
+}
+function updateTempo(){
+  $('tempoVal').textContent=bpm+' BPM';
+  const pct=Math.round(bpm/score.tempo*100);
+  $('tempoSub').textContent=`Original ${score.tempo} BPM · now ${pct}%`;
+  refreshCoachSetup();
+}
+function updateReadout(){
+  if(!score) return;
+  const b=currentBeat(), i=measureAt(b);
+  const beatIn=Math.floor(b-score.measures[i]+1e-6)+1;
+  $('bar').textContent='Bar '+(i+1);
+  $('barSub').textContent=`beat ${beatIn} · of ${score.measures.length} bars`;
+}
+document.querySelectorAll('.chip[data-v]').forEach(ch=>ch.addEventListener('click',()=>{
+  const v=ch.dataset.v; sel.has(v)?sel.delete(v):sel.add(v);
+  renderChips(); applyGains(); applyDim(); refreshView();
+}));
+$('all').addEventListener('click',()=>{ sel=new Set(VOICES); renderChips(); applyGains(); applyDim(); refreshView(); });
+$('tempo').addEventListener('input',e=>{bpm=+e.target.value;updateTempo();});
+$('tempo').addEventListener('change',restartIfPlaying);
+$('others').addEventListener('input',e=>{others=+e.target.value;$('othersVal').textContent=others?others+'%':'Off';applyGains();if(view==='roll')draw();});
+function setRange(){
+  let a=+$('from').value,b=+$('to').value; if(a>b){[a,b]=[b,a];$('from').value=a;$('to').value=b;}
+  fromBar=a; toBar=b; pos=rangeStart();
+  if(playing){halt();startPlayback(pos,false);} updateReadout(); refreshView(); refreshCoachSetup();
+}
+$('from').addEventListener('change',setRange); $('to').addEventListener('change',setRange);
+$('tDown').addEventListener('click',()=>{transpose=Math.max(-12,transpose-1);$('tVal').textContent=(transpose>0?'+':'')+transpose;restartIfPlaying();refreshCoachSetup();});
+$('tUp').addEventListener('click',()=>{transpose=Math.min(12,transpose+1);$('tVal').textContent=(transpose>0?'+':'')+transpose;restartIfPlaying();refreshCoachSetup();});
+$('play').addEventListener('click',togglePlay);
+$('stop').addEventListener('click',()=>{halt();pos=rangeStart();updateReadout();refreshView();});
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&!/INPUT|SELECT|BUTTON|TEXTAREA/.test(e.target.tagName)){e.preventDefault();togglePlay();}});
+function setView(v){
+  view=v;
+  $('vSheet').setAttribute('aria-pressed',v==='sheet'); $('vRoll').setAttribute('aria-pressed',v==='roll');
+  $('paper').hidden=v!=='sheet'; $('rollBox').hidden=v!=='roll';
+  if(v==='sheet'){ if(sheet.stale||!sheet.ready) renderSheet(); else if(Math.abs($('paper').clientWidth-sheet.width)>8) layoutSheet(); else updateSheet(currentBeat()); }
+  else draw();
+}
+$('vSheet').addEventListener('click',()=>setView('sheet'));
+$('vRoll').addEventListener('click',()=>setView('roll'));
+$('roll').addEventListener('click',e=>{
+  const r=e.target.getBoundingClientRect();
+  jumpTo(Math.max(0,Math.floor((e.clientX-r.left+viewOff)/viewPpb)));
+});
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(view==='roll')draw();});}catch(e){}
+
+/* ---------- Piano roll ---------- */
+function draw(){
+  if(view!=='roll'||!score) return;
+  const c=$('roll'), g=c.getContext('2d'), dpr=window.devicePixelRatio||1;
+  const w=c.clientWidth,h=c.clientHeight; if(!w) return;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);}
+  g.setTransform(dpr,0,0,dpr,0,0);
+  const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
+  g.fillStyle=col('--surface'); g.fillRect(0,0,w,h);
+  const beat=currentBeat(), ppb=w<520?30:40; viewPpb=ppb;
+  const total=score.end*ppb;
+  let off=beat*ppb-w*0.3; off=Math.max(0,Math.min(off,Math.max(0,total+24-w))); viewOff=off;
+  const top=24,bottom=h-8,lo=minM-1,hi=maxM+1,rowH=(bottom-top)/(hi-lo+1);
+  const y=m=>top+(hi-m)*rowH;
+  g.font='11px Figtree, system-ui, sans-serif'; g.textBaseline='middle';
+  for(let m=lo;m<=hi;m++) if(((m+transpose)%12+12)%12===0){
+    g.fillStyle=col('--line'); g.fillRect(0,Math.round(y(m)+rowH/2),w,1);
+    g.fillStyle=col('--muted'); g.fillText('C'+(Math.floor((m+transpose)/12)-1),4,y(m)+rowH/2-7);
+  }
+  score.measures.forEach((mb,i)=>{
+    const x=Math.round(mb*ppb-off)+.5; if(x<-30||x>w+5) return;
+    g.fillStyle=col('--line'); g.fillRect(x,top-6,1,h-top);
+    g.fillStyle=col('--muted'); g.fillText(String(i+1),x+4,11);
+  });
+  ['B','T','A','S'].forEach(v=>{
+    const color=col('--'+v.toLowerCase());
+    const alpha=sel.has(v)?1:(others>0?0.25+others/400:0.13);
+    voices[v].forEach(n=>{
+      const x=n.t*ppb-off, nw=Math.max(3,n.d*ppb-2);
+      if(x+nw<0||x>w) return;
+      const active=playing&&beat>=n.t&&beat<n.t+n.d;
+      const hh=Math.max(4,rowH-1)+(active?2:0), yy=y(n.m)+(rowH-hh)/2;
+      g.globalAlpha=alpha; g.fillStyle=color;
+      g.beginPath(); if(g.roundRect) g.roundRect(x,yy,nw,hh,Math.min(3,hh/2)); else g.rect(x,yy,nw,hh); g.fill();
+      if(active&&sel.has(v)){g.globalAlpha=1;g.strokeStyle=col('--ink');g.lineWidth=1.5;g.stroke();}
+    });
+  });
+  g.globalAlpha=1;
+  const rx0=rangeStart()*ppb-off, rx1=rangeEnd()*ppb-off;
+  g.globalAlpha=0.65; g.fillStyle=col('--surface');
+  if(rx0>0) g.fillRect(0,0,rx0,h);
+  if(rx1<w) g.fillRect(Math.max(0,rx1),0,w-Math.max(0,rx1),h);
+  g.globalAlpha=1;
+  const px=Math.round(beat*ppb-off);
+  g.fillStyle=col('--hot'); g.fillRect(px-1,top-8,2,h-top+8);
+  g.beginPath(); g.moveTo(px-5,top-12); g.lineTo(px+5,top-12); g.lineTo(px,top-5); g.closePath(); g.fill();
+}
+
+/* =========================================================
+   Voice coach: analyse a recording of the viewer singing one part
+   ========================================================= */
+const COACH_F={S:[190,1150],A:[135,850],T:[90,600],B:[58,420]};
+const NOTE_N=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const nName=m=>{const r=Math.round(m);return NOTE_N[((r%12)+12)%12]+(Math.floor(r/12)-1);};
+let coachRes=null;
+function refreshCoachSetup(){
+  if(!score) return;
+  const cs=$('coachVoice'), prev=cs.value, avail=VOICES.filter(v=>voices[v].length);
+  cs.innerHTML=avail.map(v=>`<option value="${v}">${VNAME[v]}</option>`).join('');
+  const only=[...sel].filter(v=>voices[v].length);
+  cs.value=avail.includes(prev)?prev:(only.length===1?only[0]:avail[0]||'');
+  $('coachWhat').textContent=`Bars ${fromBar}–${toBar} at ${bpm} BPM${transpose?`, transposed ${transpose>0?'+':''}${transpose}`:''}. Set these in the controls above before recording.`;
+}
+function expectedNotes(v){
+  const rs=rangeStart(), re=rangeEnd(), spb=60/bpm;
+  return voices[v].filter(n=>n.t>=rs-1e-6&&n.t<re-1e-6).map(n=>{
+    const bar=measureAt(n.t)+1;
+    return {s:(n.t-rs)*spb,e:(Math.min(n.t+n.d,re)-rs)*spb,m:n.m+transpose,bar,beat:n.t-score.measures[bar-1]+1};
+  });
+}
+const CSR=11025;
+async function decodeRec(file){
+  const ab=await file.arrayBuffer();
+  let buf;
+  try{ buf=await new OfflineAudioContext(1,1,44100).decodeAudioData(ab); }
+  catch(e){ throw new Error('This recording could not be opened. Use an M4A, MP3 or WAV file.'); }
+  if(buf.duration>600) throw new Error('Recordings up to 10 minutes can be analysed. Record a shorter passage.');
+  if(buf.duration<2) throw new Error('This recording is too short to analyse.');
+  for(const sr of [CSR,22050,44100]){
+    try{
+      const off=new OfflineAudioContext(1,Math.max(1,Math.ceil(buf.duration*sr)),sr);
+      const src=off.createBufferSource(); src.buffer=buf; src.connect(off.destination); src.start();
+      const r=(await off.startRendering()).getChannelData(0);
+      if(sr===CSR) return r;
+      const f=Math.round(sr/CSR), out=new Float32Array(Math.floor(r.length/f));
+      for(let i=0;i<out.length;i++){let a=0;for(let j=0;j<f;j++)a+=r[i*f+j];out[i]=a/f;}
+      return out;
+    }catch(e){}
+  }
+  throw new Error('This recording could not be processed on this device.');
+}
+/* YIN pitch tracker, 10 ms frames. Returns MIDI pitch per frame (NaN = silence/unvoiced). */
+async function trackPitch(x,SR,fmin,fmax,prog){
+  const tMin=Math.max(2,Math.floor(SR/fmax)), tMax=Math.ceil(SR/fmin), W=Math.max(256,2*tMax), hop=Math.round(SR*0.01);
+  const n=Math.max(0,Math.floor((x.length-W-tMax-3)/hop));
+  const rms=new Float32Array(n);
+  for(let i=0;i<n;i++){let s=0;const o=i*hop;for(let j=0;j<W;j+=2)s+=x[o+j]*x[o+j];rms[i]=Math.sqrt(s/(W/2));}
+  const srt=Array.from(rms).sort((a,b)=>a-b), p90=srt[Math.floor(n*0.9)]||0, p10=srt[Math.floor(n*0.1)]||0;
+  const gate=Math.max(0.003,p10*2.5,p90*0.07);
+  const out=new Float32Array(n).fill(NaN), d=new Float32Array(tMax+3);
+  let work=0;
+  for(let i=0;i<n;i++){
+    if(rms[i]<gate) continue;
+    const o=i*hop;
+    for(let tau=1;tau<=tMax+1;tau++){let s=0;for(let j=0;j<W;j++){const v=x[o+j]-x[o+j+tau];s+=v*v;}d[tau]=s;}
+    let run=0; for(let tau=1;tau<=tMax+1;tau++){run+=d[tau];d[tau]=run>0?d[tau]*tau/run:1;}
+    let tau=-1;
+    for(let t=tMin;t<=tMax;t++){ if(d[t]<0.15){ while(t+1<=tMax&&d[t+1]<d[t]) t++; tau=t; break; } }
+    if(tau<0){ let b=tMin; for(let t=tMin;t<=tMax;t++) if(d[t]<d[b]) b=t; if(d[b]<0.3) tau=b; }
+    if(tau<1) continue;
+    const a=d[tau-1],b=d[tau],c=d[tau+1],den=a-2*b+c, sh=den?Math.max(-1,Math.min(1,0.5*(a-c)/den)):0;
+    out[i]=69+12*Math.log2(SR/(tau+sh)/440);
+    if(++work%250===0){ prog(i/n); await new Promise(r=>setTimeout(r,0)); }
+  }
+  // 5-frame median, keeping silences
+  const med=new Float32Array(n).fill(NaN);
+  for(let i=0;i<n;i++){ if(out[i]!==out[i]) continue; const w=[]; for(let k=i-2;k<=i+2;k++) if(k>=0&&k<n&&out[k]===out[k]) w.push(out[k]); w.sort((a,b)=>a-b); med[i]=w[w.length>>1]; }
+  // each frame describes the middle of its window: shift so frame i sits at time i*hop
+  const sh=Math.round(W/2/hop), P=new Float32Array(n+sh).fill(NaN); P.set(med,sh);
+  return {P,hop:hop/SR};
+}
+const wrap12=d=>{d%=12;if(d>6)d-=12;if(d<-6)d+=12;return d;};
+/* Find where the singing starts (offset) and how the tempo compares (scale) */
+function alignRec(P,hop,E,dur,opt){
+  const step=0.01,N=Math.ceil(dur/step)+2,ex=new Float32Array(N).fill(NaN);
+  E.forEach(n=>{for(let k=Math.floor(n.s/step);k<Math.ceil(n.e/step)&&k<N;k++) ex[k]=n.m;});
+  const T=P.length*hop;
+  const ev=(o,k,stride)=>{let sc=0;for(let i=0;i<P.length;i+=stride){const p=P[i];if(p!==p)continue;const t=(i*hop-o)/k;if(t<0||t>=dur)continue;const e=ex[(t/step)|0];if(e!==e){sc-=0.3;continue;}sc+=Math.abs(wrap12(p-e))<0.6?1:-0.2;}return sc;};
+  let best={sc:-1e18,o:0,k:1};
+  if(opt&&opt.direct){
+    for(let o=opt.oMin;o<=opt.oMax+1e-9;o+=0.01){const sc=ev(o,1,1);if(sc>best.sc)best={sc,o,k:1};}
+  } else {
+    const oMax=Math.max(0.5,T-dur*0.3);
+    for(let k=0.9;k<=1.1001;k+=0.02) for(let o=-1;o<=oMax;o+=0.1){const sc=ev(o,k,10);if(sc>best.sc)best={sc,o,k};}
+    const c=best; best={sc:-1e18,o:c.o,k:c.k};
+    for(let k=c.k-0.02;k<=c.k+0.0201;k+=0.005) for(let o=c.o-0.15;o<=c.o+0.1501;o+=0.01){const sc=ev(o,k,1);if(sc>best.sc)best={sc,o,k};}
+  }
+  // share of sung frames inside the passage that land on the right pitch class
+  let voiced=0,hit=0;
+  for(let i=0;i<P.length;i++){const p=P[i];if(p!==p)continue;const t=(i*hop-best.o)/best.k;if(t<0||t>=dur)continue;const e=ex[(t/step)|0];if(e!==e)continue;voiced++;if(Math.abs(wrap12(p-e))<0.6)hit++;}
+  best.match=voiced?hit/voiced:0; best.voiced=voiced;
+  return best;
+}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const meanOf=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
+const medianOf=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[b.length>>1];};
+function analyseRec(P,hop,E,al){
+  const {o,k}=al, at=t=>Math.round((o+t*k)/hop);
+  // octave the singer used (e.g. an alto singing the tenor line an octave up)
+  const diffs=[];
+  E.forEach(n=>{for(let i=at(n.s+0.25*(n.e-n.s));i<at(n.e-0.1*(n.e-n.s));i++){const p=P[i];if(p===p&&Math.abs(wrap12(p-n.m))<0.6)diffs.push(p-n.m);}});
+  const oct=Math.round(medianOf(diffs)/12)*12;
+  const notes=E.map((n,idx)=>{
+    const len=n.e-n.s, a=at(n.s+Math.min(0.25*len,Math.max(0.08,0.15*len))), b=at(n.e-0.1*len);
+    const c=[]; let frames=0;
+    for(let i=a;i<b;i++){frames++;const p=P[i];if(p===p)c.push(wrap12(p-n.m-oct)*100);}
+    const res={...n,idx,cov:frames?c.length/frames:0,cents:null,sd:null,onset:null,sung:null};
+    if(res.cov>=0.3&&c.length>=2){
+      res.cents=medianOf(c); const mu=meanOf(c); res.sd=Math.sqrt(meanOf(c.map(v=>(v-mu)*(v-mu))));
+      res.sung=n.m+res.cents/100;
+    }
+    // entry timing: only where the pitch changes or a phrase starts
+    const prev=E[idx-1], fresh=!prev||(Math.abs(prev.m-n.m)>0.01&&Math.round(Math.abs(prev.m-n.m))%12!==0)||n.s-prev.e>0.05;
+    if(fresh&&res.cents!=null&&len>=0.15){
+      const i0=Math.max(at(n.s-0.35),prev?at((prev.s+prev.e)/2):0), i1=Math.min(at(n.s+0.6),at(n.e));
+      for(let i=Math.max(0,i0);i<i1-2;i++){
+        let ok=true; for(let j=0;j<3;j++){const p=P[i+j]; if(!(p===p&&Math.abs(wrap12(p-n.m-oct))<0.5)){ok=false;break;}}
+        if(ok){res.onset=(i*hop-o)/k-n.s;break;}
+      }
+    }
+    return res;
+  });
+  const total=notes.length, sung=notes.filter(n=>n.cents!=null), right=sung.filter(n=>Math.abs(n.cents)<50);
+  const missed=total-sung.length, wrong=sung.length-right.length;
+  const absC=meanOf(right.map(n=>Math.abs(n.cents))), bias=meanOf(right.map(n=>n.cents));
+  // a constant delay is indistinguishable from starting later, so time each entry against your own steady beat
+  const ons=notes.filter(n=>n.onset!=null), onMed=medianOf(ons.map(n=>n.onset)); ons.forEach(n=>n.dev=n.onset-onMed);
+  const absOn=meanOf(ons.map(n=>Math.abs(n.dev)))*1000, rushed=ons.filter(n=>n.dev<-0.08).length, dragged=ons.filter(n=>n.dev>0.08).length;
+  let drift=0;
+  if(right.length>=6){const xs=right.map(n=>n.s),ys=right.map(n=>n.cents),mx=meanOf(xs),my=meanOf(ys);let sxy=0,sxx=0;xs.forEach((x,i)=>{sxy+=(x-mx)*(ys[i]-my);sxx+=(x-mx)*(x-mx);});const span=Math.max(...xs)-Math.min(...xs);drift=sxx?sxy/sxx*span:0;}
+  const pitchScore=total?Math.round(100*right.length/total):0;
+  const intonScore=right.length?Math.round(clamp(100-(absC-5)*2.2,0,100)):0;
+  const rhythmScore=ons.length>=3?Math.round(clamp(100-Math.max(0,absOn-20)/1.6-Math.max(0,Math.abs(100-Math.round(100/k))-2)*4,0,100)):null;
+  const tempoPct=Math.round((1/k)*100);
+  const overall=Math.round(0.45*pitchScore+0.3*intonScore+0.25*(rhythmScore==null?intonScore:rhythmScore));
+  // high notes, leaps, steadiness
+  const ms=E.map(n=>n.m).sort((a,b)=>a-b), hiCut=ms[Math.floor(ms.length*0.75)];
+  const hi=right.filter(n=>n.m>=hiCut&&n.m>ms[0]), hiBias=hi.length>=3?meanOf(hi.map(n=>n.cents)):null;
+  const leap=sung.filter(n=>{const p=E[n.idx-1];return p&&n.s-p.e<0.3&&Math.abs(n.m-p.m)>=5;});
+  const nonLeap=sung.filter(n=>!leap.includes(n));
+  const leapErr=leap.length>=3?meanOf(leap.map(n=>Math.min(100,Math.abs(n.cents)))):null, otherErr=meanOf(nonLeap.map(n=>Math.min(100,Math.abs(n.cents))));
+  const sdMean=meanOf(right.filter(n=>n.e-n.s>=0.4).map(n=>n.sd));
+  // bars to practise
+  const byBar=new Map();
+  notes.forEach(n=>{const b=byBar.get(n.bar)||{bar:n.bar,bad:0,wrong:[],missed:0,off:[]};
+    if(n.cents==null) {b.missed++;b.bad+=60;}
+    else if(Math.abs(n.cents)>=50){b.wrong.push(n);b.bad+=100;}
+    else {b.off.push(n.cents); b.bad+=Math.max(0,Math.abs(n.cents)-15);}
+    byBar.set(n.bar,b);});
+  const worst=[...byBar.values()].filter(b=>b.bad>=40).sort((a,b)=>b.bad-a.bad).slice(0,4).sort((a,b)=>a.bar-b.bar);
+  return {notes,total,missed,wrong,right:right.length,absC,bias,drift,absOn,rushed,dragged,onsets:ons.length,pitchScore,intonScore,rhythmScore,tempoPct,overall,oct,hiBias,leapErr,otherErr,sdMean,worst,al};
+}
+function coachTips(r){
+  const t=[], c=v=>Math.round(Math.abs(v));
+  if(r.missed>r.total*0.15) t.push(['Some notes didn’t come through',`${r.missed} of ${r.total} notes were too quiet or unclear to measure. Sing out on a steady breath, keep the recorder close, and check you recorded the bars set above.`]);
+  if(r.pitchScore<85&&r.wrong) t.push(['Wrong notes',`${r.wrong} note${r.wrong>1?'s were':' was'} a semitone or more away from the written pitch. Practise the bars listed below slowly with only your part playing, then add the other voices back.`]);
+  if(r.bias<=-8) t.push(['You tend to sing flat',`On average your notes sat ${c(r.bias)} cents under pitch. Think of each note from slightly above, keep the soft palate lifted, and keep the breath support going right to the end of each phrase.`]);
+  else if(r.bias>=8) t.push(['You tend to sing sharp',`On average your notes sat ${c(r.bias)} cents above pitch. Push less: relax the jaw and neck and use a little less breath pressure, especially on loud or high notes.`]);
+  if(r.drift<=-12) t.push(['Pitch sinks as you go',`You ended about ${c(r.drift)} cents lower than you started. Take fuller breaths at the rests and re-tune from the other voices at each phrase start.`]);
+  else if(r.drift>=12) t.push(['Pitch creeps up',`You ended about ${c(r.drift)} cents higher than you started. Stay relaxed as the music builds and listen down to the bass line.`]);
+  if(r.hiBias!=null&&r.hiBias<=-15) t.push(['High notes come out flat',`Your highest notes were ${c(r.hiBias)} cents flat on average. Prepare them with an open, tall vowel and more breath energy, and slide up to them on “ng” first to feel the target.`]);
+  if(r.leapErr!=null&&r.leapErr>r.otherErr+12) t.push(['Big leaps land off target',`After jumps of a fourth or more you were ${Math.round(r.leapErr)} cents off on average, against ${Math.round(r.otherErr)} elsewhere. Hear the target note in your head before you leave the one before, and practise each leap slowly as a slide, then cleanly.`]);
+  if(r.sdMean>28) t.push(['Long notes waver',`Held notes moved about ±${Math.round(r.sdMean)} cents. Sustain long notes on “oo” with a steady, supported airflow and avoid pushing vibrato.`]);
+  if(r.onsets>=3&&r.absOn>=45){
+    const lean=r.dragged>r.rushed*1.5?' Most of the misses were late: breathe in on the beat before and put consonants just ahead of the beat so the vowel lands on it.':r.rushed>r.dragged*1.5?' Most of the misses were early: hold each note to its full length and feel the pulse before moving on.':' Clap or speak the rhythm in time with the moving red line, then sing it.';
+    t.push(['Uneven rhythm',`New notes landed about ${Math.round(r.absOn)} ms off a steady beat on average (${r.rushed} early, ${r.dragged} late by more than 80 ms).${lean}`]);
+  }
+  if(r.tempoPct<=95) t.push(['You slowed down',`Your tempo was about ${r.tempoPct}% of the ${bpm} BPM set. Practise with the red line moving and keep pace with it, or lower the tempo and build back up.`]);
+  else if(r.tempoPct>=105) t.push(['You sped up',`Your tempo was about ${r.tempoPct}% of the ${bpm} BPM set. Lean back into long notes and count the full value of each rest.`]);
+  if(!t.length) t.push(['Solid run',`Pitch, intonation and rhythm all held up. Try the next tempo up, or turn your own part off and sing it against the other voices.`]);
+  return t.slice(0,5);
+}
+function describeBar(b){
+  if(b.wrong.length){const n=b.wrong.sort((x,y)=>Math.abs(y.cents)-Math.abs(x.cents))[0];return `beat ${+n.beat.toFixed(2)}: you sang about ${nName(n.sung)} instead of ${nName(n.m)}${b.wrong.length>1?` (and ${b.wrong.length-1} more wrong note${b.wrong.length>2?'s':''})`:''}`;}
+  if(b.missed) return `${b.missed} note${b.missed>1?'s':''} too quiet or unclear to measure`;
+  const m=meanOf(b.off); return `notes ${Math.round(Math.abs(m))} cents ${m<0?'flat':'sharp'} on average`;
+}
+function scoreColor(v){return v>=80?'var(--t)':v>=60?'var(--a)':'var(--s)';}
+function renderCoach(r){
+  const tile=(main,label,val,det)=>`<div class="score${main?' main':''}"><span class="what">${label}</span><span class="num">${val==null?'–':val}${val==null?'':'<small>/100</small>'}</span><span class="det">${det}</span><div class="meter"><span style="width:${val||0}%;background:${scoreColor(val||0)}"></span></div></div>`;
+  $('scores').innerHTML=
+    tile(true,'Overall',r.overall,`${VNAME[r.voice]} · bars ${r.from}–${r.to}`)+
+    tile(false,'Right notes',r.pitchScore,`${r.right} of ${r.total} notes${r.missed?` · ${r.missed} not heard`:''}`)+
+    tile(false,'Intonation',r.right?r.intonScore:null,r.right?`±${Math.round(r.absC)} cents · ${Math.abs(r.bias)<4?'centred':Math.round(Math.abs(r.bias))+' cents '+(r.bias<0?'flat':'sharp')}`:'no notes in tune to measure')+
+    tile(false,'Rhythm',r.rhythmScore,r.rhythmScore==null?'not enough note changes to time':`±${Math.round(r.absOn)} ms off the beat · tempo ${r.tempoPct}%`);
+  $('keyNote').textContent=r.oct?`You sang an octave ${r.oct>0?'higher':'lower'} than written; the chart shows it moved to the written octave.`:'';
+  $('tips').innerHTML=coachTips(r).map(([a,b])=>`<li><strong>${esc(a)}</strong><span>${esc(b)}</span></li>`).join('');
+  $('worstH').hidden=!r.worst.length; $('worst').hidden=!r.worst.length;
+  $('worst').innerHTML=r.worst.map(b=>`<li><span class="w"><b>Bar ${b.bar}</b> · ${esc(describeBar(b))}</span><button class="btn" data-bar="${b.bar}">Loop this bar</button></li>`).join('');
+  $('worst').querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+    const b=+btn.dataset.bar; $('from').value=Math.max(1,b); $('to').value=Math.min(score.measures.length,b); $('loop').checked=true;
+    sel=new Set([r.voice]); renderChips(); applyGains(); applyDim(); setRange();
+    $('paper').scrollIntoView({behavior:'smooth',block:'start'});
+  }));
+  $('coachOut').hidden=false;
+  drawCoach();
+}
+function drawCoach(){
+  const r=coachRes; if(!r||$('coachOut').hidden) return;
+  const cv=$('pitchCv'), box=cv.parentElement, dpr=window.devicePixelRatio||1;
+  const dur=r.dur, pps=Math.max(box.clientWidth/Math.max(dur,1),Math.min(90,Math.max(40,9000/dur)));
+  const w=Math.max(box.clientWidth,Math.ceil(dur*pps)+50), h=230;
+  cv.style.width=w+'px'; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
+  g.fillStyle=col('--bg'); g.fillRect(0,0,w,h);
+  const ms=r.E.map(n=>n.m), lo=Math.min(...ms)-3, hi=Math.max(...ms)+3, top=22, bot=h-10, rowH=(bot-top)/(hi-lo);
+  const X=t=>40+t*pps, Y=m=>top+(hi-m)*rowH;
+  g.font='11px Figtree, system-ui, sans-serif'; g.textBaseline='middle';
+  for(let m=Math.ceil(lo);m<=hi;m++){ if(((m%12)+12)%12===0||((m%12)+12)%12===7){ g.fillStyle=col('--line'); g.fillRect(40,Math.round(Y(m))+.5,w-40,1); g.fillStyle=col('--muted'); g.fillText(nName(m),4,Y(m)); } }
+  const rs=r.rs!=null?r.rs:rangeStart(), spb=60/r.bpm;
+  for(let b=r.from;b<=r.to;b++){ const x=X((score.measures[b-1]-rs)*spb); g.fillStyle=col('--line'); g.fillRect(Math.round(x)+.5,top-8,1,bot-top+8); g.fillStyle=col('--muted'); g.fillText(String(b),x+4,10); }
+  g.fillStyle=col('--'+r.voice.toLowerCase()); g.globalAlpha=0.22;
+  r.E.forEach(n=>{ const x=X(n.s), ww=Math.max(3,(n.e-n.s)*pps-2); g.beginPath(); g.roundRect?g.roundRect(x,Y(n.m)-rowH/2,ww,rowH,3):g.rect(x,Y(n.m)-rowH/2,ww,rowH); g.fill(); });
+  g.globalAlpha=1;
+  // sung pitch, coloured by distance from the written note
+  const {P,hop}=r, {o,k}=r.al; let last=null;
+  const exAt=t=>{for(const n of r.E) if(t>=n.s&&t<n.e) return n.m; return null;};
+  g.lineWidth=2.2; g.lineCap='round';
+  for(let i=0;i<P.length;i++){
+    const p=P[i]; const t=(i*hop-o)/k;
+    if(p!==p||t<-0.5||t>dur+0.5){last=null;continue;}
+    const e=exAt(t); let m=p-r.oct;
+    if(e!=null){ m=e+wrap12(m-e); }
+    const dc=e==null?null:Math.abs(m-e)*100;
+    const c=dc==null?col('--muted'):dc<25?col('--t'):dc<50?col('--a'):col('--s');
+    const pt=[X(t),Y(clamp(m,lo,hi))];
+    if(last&&Math.abs(last.m-m)<1.5){ g.strokeStyle=c; g.beginPath(); g.moveTo(last.x,last.y); g.lineTo(pt[0],pt[1]); g.stroke(); }
+    last={x:pt[0],y:pt[1],m};
+  }
+}
+$('recFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f||!score) return;
+  const st=$('coachStatus'); st.className=''; const v=$('coachVoice').value;
+  if(!v){ st.textContent='This score has no part to sing.'; return; }
+  const E=expectedNotes(v);
+  if(E.length<3){ st.textContent='Choose a few more bars: the coach needs at least three notes of your part.'; return; }
+  halt();
+  try{
+    st.textContent='Opening the recording…';
+    const x=await decodeRec(f);
+    const [fmin,fmax]=COACH_F[v];
+    const {P,hop}=await trackPitch(x,CSR,fmin/1.9,fmax*1.9,p=>{st.textContent=`Listening to your pitch… ${Math.round(p*100)}%`;});
+    st.textContent='Lining your recording up with the music…'; await new Promise(r=>setTimeout(r,0));
+    const dur=E[E.length-1].e;
+    const al=alignRec(P,hop,E,dur);
+    if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Your singing couldn’t be matched to the ${VNAME[v]} part in bars ${fromBar}–${toBar}. Check the part, bars and transposition above match what you sang, and that the recording holds mainly your voice.`; return; }
+    const r=analyseRec(P,hop,E,al);
+    coachRes={...r,P,hop,E,dur,voice:v,from:fromBar,to:toBar,bpm,rs:rangeStart(),title:score.title,file:f.name};
+    st.textContent=`Analysed ${f.name}. Your singing starts ${al.o>=0?al.o.toFixed(1)+' s into':'just before'} the recording.`;
+    renderCoach(coachRes);
+  }catch(err){ console.error(err); st.className='err'; st.textContent=err.message||'This recording could not be analysed.'; }
+});
+window.addEventListener('resize',()=>{ clearTimeout(window.__cT); window.__cT=setTimeout(drawCoach,200); });
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawCoach);}catch(e){}
+
+/* =========================================================
+   Live singing: microphone pitch while the player plays
+   ========================================================= */
+let liveTake=null, liveLoopPrev=false;
+function yinFrame(L){
+  const x=L.x, SR=L.sr; let s=0; for(let i=0;i<x.length;i++) s+=x[i]*x[i];
+  const rms=Math.sqrt(s/x.length);
+  if(rms<L.gate) return {rms,m:NaN};
+  const tMin=Math.max(2,Math.floor(SR/L.fmax)), tMax=Math.min(Math.ceil(SR/L.fmin),Math.floor(x.length/2)-2);
+  const W=Math.min(x.length-tMax-2,Math.max(256,2*tMax)), d=L.d;
+  for(let tau=1;tau<=tMax+1;tau++){let a=0;for(let j=0;j<W;j++){const v=x[j]-x[j+tau];a+=v*v;}d[tau]=a;}
+  let run=0; for(let tau=1;tau<=tMax+1;tau++){run+=d[tau];d[tau]=run>0?d[tau]*tau/run:1;}
+  let tau=-1;
+  for(let t=tMin;t<=tMax;t++){ if(d[t]<0.15){ while(t+1<=tMax&&d[t+1]<d[t]) t++; tau=t; break; } }
+  if(tau<0){ let b=tMin; for(let t=tMin;t<=tMax;t++) if(d[t]<d[b]) b=t; if(d[b]<0.3) tau=b; }
+  if(tau<1) return {rms,m:NaN};
+  const a=d[tau-1],b=d[tau],c=d[tau+1],den=a-2*b+c, sh=den?Math.max(-1,Math.min(1,0.5*(a-c)/den)):0;
+  return {rms,m:69+12*Math.log2(SR/(tau+sh)/440)};
+}
+async function startLive(){
+  if(liveTake){ halt(); return; }
+  if(!score) return;
+  const st=$('coachStatus'); st.className='';
+  const v=$('coachVoice').value;
+  if(!v){ st.textContent='This score has no part to sing.'; return; }
+  const E=expectedNotes(v);
+  if(E.length<3){ st.textContent='Choose a few more bars: the coach needs at least three notes of your part.'; return; }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ st.className='err'; st.textContent='This browser can’t use the microphone. Open the app from your home screen, or in Safari or Chrome.'; return; }
+  halt(); ensureAudio();
+  setAudioSession('play-and-record');
+  let stream;
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); }
+  catch(e){
+    setAudioSession('playback'); st.className='err';
+    st.textContent=e&&e.name==='NotAllowedError'?'The microphone isn’t allowed for this app. Allow it in your phone’s settings for the browser you installed the app from, then try again.':'The microphone couldn’t be opened. Close other apps that use it and try again.';
+    return;
+  }
+  await actx.resume();
+  const src=actx.createMediaStreamSource(stream), an=actx.createAnalyser();
+  an.fftSize=4096; an.smoothingTimeConstant=0; src.connect(an);
+  const ds=Math.max(1,Math.round(actx.sampleRate/12000)), sr=actx.sampleRate/ds, [fmin,fmax]=COACH_F[v];
+  const cs=getComputedStyle(document.documentElement), col=n=>cs.getPropertyValue(n).trim();
+  const ms=E.map(n=>n.m);
+  liveTake={stream,src,an,v,E,raw:new Float32Array(an.fftSize),x:new Float32Array(Math.floor(an.fftSize/ds)),d:new Float32Array(Math.floor(an.fftSize/ds)),
+    ds,sr,fmin:fmin/1.6,fmax:fmax*1.6,pts:[],floor:null,gate:0.01,from:fromBar,to:toBar,bpm,rs:rangeStart(),
+    lo:Math.min(...ms)-3,hi:Math.max(...ms)+3,frame:0,
+    C:{bg:col('--surface'),line:col('--line'),muted:col('--muted'),note:col('--'+v.toLowerCase()),t:col('--t'),a:col('--a'),s:col('--s'),hot:col('--hot')}};
+  liveLoopPrev=$('loop').checked; $('loop').checked=false;
+  $('liveLabel').textContent='Stop and score'; $('liveStrip').hidden=false; $('liveGot').textContent='Listening…'; $('liveWant').textContent='';
+  st.textContent=`Singing ${VNAME[v]}, bars ${fromBar}–${toBar}. Your results appear when the passage ends or you tap pause.`;
+  pos=rangeStart(); startPlayback(pos,$('count').checked);
+  liveTake.t0=S0.passes[0].t0;
+  requestAnimationFrame(liveFrame);
+}
+function liveExpected(L,t){ for(const n of L.E) if(t>=n.s&&t<n.e) return n.m; return null; }
+function liveFrame(){
+  const L=liveTake; if(!L||L.ending) return;
+  L.an.getFloatTimeDomainData(L.raw);
+  const x=L.x, ds=L.ds; for(let i=0;i<x.length;i++){let a=0;for(let j=0;j<ds;j++)a+=L.raw[i*ds+j];x[i]=a/ds;}
+  const tNow=actx.currentTime-(L.raw.length/actx.sampleRate)/2-L.t0;
+  const {rms,m}=yinFrame(L);
+  // the silence gate follows the room's noise floor
+  L.floor=L.floor==null?rms:(rms<L.floor?rms:L.floor*1.001);
+  L.gate=Math.max(0.004,L.floor*4);
+  if(tNow>-0.6&&(!L.pts.length||tNow>L.pts[L.pts.length-1][0]+0.004)) L.pts.push([tNow,m]);
+  drawLive(L,tNow,m);
+  requestAnimationFrame(liveFrame);
+}
+function drawLive(L,tNow,m){
+  const cv=$('liveCv'), dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; if(!w) return;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  const g=cv.getContext('2d'), C=L.C; g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle=C.bg; g.fillRect(0,0,w,h);
+  const lo=L.lo, hi=L.hi, rowH=(h-8)/(hi-lo), Y=v=>4+(hi-v)*rowH;
+  const nowX=w*0.62, pps=w/5, X=t=>nowX+(t-tNow)*pps;
+  g.fillStyle=C.note; g.globalAlpha=0.3;
+  L.E.forEach(n=>{ if(n.e<tNow-3.3||n.s>tNow+2) return; g.fillRect(X(n.s),Y(n.m)-rowH/2,Math.max(2,(n.e-n.s)*pps-2),rowH); });
+  g.globalAlpha=1;
+  g.fillStyle=C.hot; g.fillRect(Math.round(nowX)-1,0,2,h);
+  g.lineWidth=2.5; g.lineCap='round';
+  let last=null;
+  for(let i=L.pts.length-1;i>=0;i--){
+    const [t,p]=L.pts[i]; if(t<tNow-3.3) break;
+    if(p!==p){last=null;continue;}
+    const e=liveExpected(L,t), ref=e!=null?e:(lo+hi)/2, v=ref+wrap12(p-ref), dc=e==null?null:Math.abs(v-e)*100;
+    const pt={x:X(t),y:Y(clamp(v,lo,hi)),v};
+    if(last&&Math.abs(last.v-v)<1.5){ g.strokeStyle=dc==null?C.muted:dc<25?C.t:dc<50?C.a:C.s; g.beginPath(); g.moveTo(last.x,last.y); g.lineTo(pt.x,pt.y); g.stroke(); }
+    last=pt;
+  }
+  if(++L.frame%6===0){
+    const e=liveExpected(L,tNow);
+    $('liveWant').innerHTML=e!=null?`Now: <b>${nName(e)}</b>`:(tNow<0?'Get ready…':'Rest');
+    if(m!==m) $('liveGot').textContent='Listening…';
+    else if(e!=null){ const dv=wrap12(m-e)*100, r=Math.round(dv); $('liveGot').innerHTML=Math.abs(dv)<50?`You: <b>${nName(e)}</b> ${r>0?'+':r<0?'−':'±'}${Math.abs(r)}¢`:`You: <b>${nName(e+dv/100)}</b>`; }
+    else $('liveGot').innerHTML=`You: <b>${nName(m)}</b>`;
+  }
+}
+function stopLive(analyse){
+  const L=liveTake; if(!L) return; liveTake=null;
+  try{L.src.disconnect();}catch(e){} L.stream.getTracks().forEach(t=>t.stop()); setAudioSession('playback');
+  $('loop').checked=liveLoopPrev; $('liveLabel').textContent='Sing live'; $('liveStrip').hidden=true;
+  if(!analyse) return;
+  const st=$('coachStatus'), pts=L.pts, tEnd=pts.length?pts[pts.length-1][0]:0;
+  const E=L.E.filter(n=>n.s<tEnd-0.15);
+  if(E.length<3){ st.className='err'; st.textContent='That take was too short to score. Sing at least a few notes.'; return; }
+  // resample the live readings onto a 10 ms grid starting 0.6 s before the passage
+  const hop=0.01, start=-0.6, N=Math.ceil((tEnd-start)/hop)+1, raw=new Float32Array(N).fill(NaN);
+  let j=0;
+  for(let i=0;i<N;i++){ const t=start+i*hop; while(j<pts.length-1&&Math.abs(pts[j+1][0]-t)<=Math.abs(pts[j][0]-t)) j++; if(Math.abs(pts[j][0]-t)<=0.02) raw[i]=pts[j][1]; }
+  const P=new Float32Array(N).fill(NaN);
+  for(let i=0;i<N;i++){ if(raw[i]!==raw[i]) continue; const w=[]; for(let k=i-2;k<=i+2;k++) if(k>=0&&k<N&&raw[k]===raw[k]) w.push(raw[k]); w.sort((a,b)=>a-b); P[i]=w[w.length>>1]; }
+  const dur=E[E.length-1].e;
+  // timing is known from the player; only allow for microphone delay
+  const al=alignRec(P,hop,E,dur,{direct:true,oMin:-start-0.1,oMax:-start+0.45});
+  if(al.voiced<20||al.match<0.25){ st.className='err'; st.textContent=`Not enough of your singing matched the ${VNAME[L.v]} part. Check the microphone can hear you clearly and that you sang the bars shown.`; return; }
+  const r=analyseRec(P,hop,E,al);
+  const lastBar=Math.max(...E.map(n=>n.bar));
+  coachRes={...r,P,hop,E,dur,voice:L.v,from:L.from,to:lastBar,bpm:L.bpm,rs:L.rs,title:score.title,file:'live take'};
+  st.className=''; st.textContent=E.length<L.E.length?`Live take scored up to bar ${lastBar} (you stopped before the end).`:'Live take scored.';
+  renderCoach(coachRes);
+  $('coach').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+}
+$('liveBtn').addEventListener('click',startLive);
+
+/* ---------- Start ---------- */
+renderPlay();
+initLibrary();
+loadLibrary('sicut');
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
